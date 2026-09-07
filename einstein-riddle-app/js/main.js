@@ -8,6 +8,7 @@ import {
   FALLBACK_CLUES,
 } from "./puzzle-data.js";
 import { createGameState } from "./state.js";
+import { bindDragDrop } from "./drag-drop.js";
 
 const game = createGameState();
 
@@ -55,6 +56,22 @@ function renderAll() {
   renderPool();
   document.getElementById("btn-undo").disabled = !game.canUndo();
 }
+
+function resolveFrom(value, category) {
+  const slotIdx = game.getPlacement()[category].indexOf(value);
+  return slotIdx >= 0
+    ? { type: "slot", category, houseIndex: slotIdx }
+    : { type: "pool" };
+}
+
+bindDragDrop({
+  boardEl: document.getElementById("board"),
+  poolEl: document.getElementById("pool"),
+  onDrop({ value, category, to }) {
+    game.moveCard({ value, category, from: resolveFrom(value, category), to });
+    renderAll();
+  },
+});
 
 game.loadPuzzle({ answer: FALLBACK_ANSWER, clues: FALLBACK_CLUES, difficulty: "easy" });
 renderAll();
