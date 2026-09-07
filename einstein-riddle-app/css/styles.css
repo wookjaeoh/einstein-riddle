@@ -1,0 +1,20 @@
+:root {
+  --bg: #f3f6f4;
+  --ink: #1a2e28;
+  --accent: #0d6e5a;
+  --line: #c5d4ce;
+  --warn: #b33b2e;
+  --ok: #1b6b3a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Pretendard", "Noto Sans KR", sans-serif;
+  background: linear-gradient(160deg, #e8f2ee 0%, #f7f3ea 55%, #eef1f5 100%);
+  color: var(--ink);
+  min-height: 100vh;
+}
+.top-bar { padding: 1rem 1.25rem 0.5rem; }
+.top-bar h1 { margin: 0; font-size: clamp(1.4rem, 3vw, 2rem); }
+.tagline { margin: 0.25rem 0 0; opacity: 0.8; }
+#app { padding: 0.75rem 1.25rem 2rem; }

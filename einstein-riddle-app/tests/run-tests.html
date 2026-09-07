@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Einstein tests</title>
+</head>
+<body>
+  <h1>Tests</h1>
+  <pre id="out"></pre>
+  <script type="module">
+    const out = document.getElementById("out");
+    let failed = 0;
+    function assert(cond, msg) {
+      if (!cond) {
+        failed++;
+        out.textContent += "FAIL: " + msg + "\n";
+      } else {
+        out.textContent += "ok: " + msg + "\n";
+      }
+    }
+    window.__assert = assert;
+    window.__done = () => {
+      out.textContent += failed === 0 ? "\nALL PASSED\n" : `\n${failed} FAILED\n`;
+    };
+    out.textContent = "harness ready — add imports in later tasks\n";
+    window.__done();
+  </script>
+</body>
+</html>
