@@ -10,8 +10,20 @@ import {
 import { createGameState } from "./state.js";
 import { bindDragDrop } from "./drag-drop.js";
 import { renderClues, applyHighlight } from "./clues.js";
+import { grade } from "./validate.js";
 
 const game = createGameState();
+
+function formatMs(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+}
+
+setInterval(() => {
+  document.getElementById("timer").textContent = formatMs(game.getElapsedMs());
+}, 250);
 let selectedClueId = null;
 
 function renderBoard() {
@@ -85,6 +97,37 @@ bindDragDrop({
     renderAll();
   },
 });
+
+document.getElementById("btn-undo").onclick = () => {
+  game.undo();
+  renderAll();
+};
+
+document.getElementById("btn-reset").onclick = () => {
+  if (!confirm("배치만 초기화할까요? (타이머는 유지)")) return;
+  game.resetPlacement({ keepTimer: true });
+  renderAll();
+  document.getElementById("feedback").textContent = "";
+};
+
+document.getElementById("btn-submit").onclick = () => {
+  const result = grade(game.getPlacement(), game.getAnswer());
+  const fb = document.getElementById("feedback");
+  fb.className = "feedback";
+  if (!result.complete) {
+    fb.textContent = "모든 칸에 카드를 배치한 뒤 제출해 주세요.";
+    fb.classList.add("bad");
+    return;
+  }
+  game.stopTimer();
+  if (result.solved) {
+    fb.textContent = `정답입니다! 소요 시간 ${formatMs(game.getElapsedMs())}`;
+    fb.classList.add("ok");
+  } else {
+    fb.textContent = `틀린 칸 수 = ${result.wrongCount}`;
+    fb.classList.add("bad");
+  }
+};
 
 game.loadPuzzle({ answer: FALLBACK_ANSWER, clues: FALLBACK_CLUES, difficulty: "easy" });
 renderAll();
