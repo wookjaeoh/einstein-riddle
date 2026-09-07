@@ -11,6 +11,7 @@
     import {
       CATEGORIES, VALUES, FALLBACK_ANSWER, FALLBACK_CLUES, HOUSES, DIFFICULTY_TARGETS,
     } from "../js/puzzle-data.js";
+    import { countWrong, isComplete, grade } from "../js/validate.js";
 
     const out = document.getElementById("out");
     let failed = 0;
@@ -29,6 +30,15 @@
     assert(FALLBACK_CLUES.length === 15, "fallback 15 clues");
     assert(DIFFICULTY_TARGETS.easy.min === 12, "easy min");
     assert(DIFFICULTY_TARGETS.hard.max === 11, "hard max");
+
+    const empty = Object.fromEntries(CATEGORIES.map((c) => [c, [null, null, null, null, null]]));
+    assert(isComplete(empty) === false, "empty incomplete");
+    assert(countWrong(FALLBACK_ANSWER, FALLBACK_ANSWER) === 0, "answer has 0 wrong");
+    assert(grade(FALLBACK_ANSWER, FALLBACK_ANSWER).solved === true, "answer solved");
+
+    const oneWrong = structuredClone(FALLBACK_ANSWER);
+    oneWrong.animal[3] = "dog";
+    assert(countWrong(oneWrong, FALLBACK_ANSWER) >= 1, "tampered answer has wrong cells");
 
     out.textContent += failed === 0 ? "\nALL PASSED\n" : `\n${failed} FAILED\n`;
   </script>
