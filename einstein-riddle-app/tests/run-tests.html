@@ -8,22 +8,29 @@
   <h1>Tests</h1>
   <pre id="out"></pre>
   <script type="module">
+    import {
+      CATEGORIES, VALUES, FALLBACK_ANSWER, FALLBACK_CLUES, HOUSES, DIFFICULTY_TARGETS,
+    } from "../js/puzzle-data.js";
+
     const out = document.getElementById("out");
     let failed = 0;
     function assert(cond, msg) {
-      if (!cond) {
-        failed++;
-        out.textContent += "FAIL: " + msg + "\n";
-      } else {
-        out.textContent += "ok: " + msg + "\n";
-      }
+      out.textContent += (cond ? "ok: " : "FAIL: ") + msg + "\n";
+      if (!cond) failed++;
     }
-    window.__assert = assert;
-    window.__done = () => {
-      out.textContent += failed === 0 ? "\nALL PASSED\n" : `\n${failed} FAILED\n`;
-    };
-    out.textContent = "harness ready — add imports in later tasks\n";
-    window.__done();
+
+    assert(HOUSES.length === 5, "5 houses");
+    assert(CATEGORIES.length === 5, "5 categories");
+    for (const cat of CATEGORIES) {
+      assert(VALUES[cat].length === 5, cat + " has 5 values");
+      assert(FALLBACK_ANSWER[cat].length === 5, cat + " answer length");
+      assert(new Set(FALLBACK_ANSWER[cat]).size === 5, cat + " answer unique");
+    }
+    assert(FALLBACK_CLUES.length === 15, "fallback 15 clues");
+    assert(DIFFICULTY_TARGETS.easy.min === 12, "easy min");
+    assert(DIFFICULTY_TARGETS.hard.max === 11, "hard max");
+
+    out.textContent += failed === 0 ? "\nALL PASSED\n" : `\n${failed} FAILED\n`;
   </script>
 </body>
 </html>
