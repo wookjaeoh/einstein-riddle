@@ -12,6 +12,7 @@
       CATEGORIES, VALUES, FALLBACK_ANSWER, FALLBACK_CLUES, HOUSES, DIFFICULTY_TARGETS,
     } from "../js/puzzle-data.js";
     import { countWrong, isComplete, grade } from "../js/validate.js";
+    import { createGameState } from "../js/state.js";
 
     const out = document.getElementById("out");
     let failed = 0;
@@ -39,6 +40,24 @@
     const oneWrong = structuredClone(FALLBACK_ANSWER);
     oneWrong.animal[3] = "dog";
     assert(countWrong(oneWrong, FALLBACK_ANSWER) >= 1, "tampered answer has wrong cells");
+
+    const g = createGameState();
+    g.loadPuzzle({ answer: FALLBACK_ANSWER, clues: FALLBACK_CLUES, difficulty: "easy" });
+    assert(g.getDifficulty() === "easy", "default easy");
+    assert(g.getClues().length === 15, "fallback 15 clues");
+    assert(g.getAnswer().nation[0] === "norway", "fallback norway house1");
+
+    const placed = g.moveCard({
+      value: "norway",
+      category: "nation",
+      from: { type: "pool" },
+      to: { type: "slot", houseIndex: 0, category: "nation" },
+    });
+    assert(placed === true, "move to empty slot");
+    assert(g.getPlacement().nation[0] === "norway", "norway in house1");
+    assert(g.canUndo() === true, "can undo");
+    g.undo();
+    assert(g.getPlacement().nation[0] == null, "undone");
 
     out.textContent += failed === 0 ? "\nALL PASSED\n" : `\n${failed} FAILED\n`;
   </script>
