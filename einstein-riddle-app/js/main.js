@@ -9,8 +9,10 @@ import {
 } from "./puzzle-data.js";
 import { createGameState } from "./state.js";
 import { bindDragDrop } from "./drag-drop.js";
+import { renderClues, applyHighlight } from "./clues.js";
 
 const game = createGameState();
+let selectedClueId = null;
 
 function renderBoard() {
   const board = document.getElementById("board");
@@ -54,6 +56,17 @@ function renderPool() {
 function renderAll() {
   renderBoard();
   renderPool();
+  const clues = game.getClues();
+  renderClues({
+    container: document.getElementById("clues"),
+    clues,
+    selectedId: selectedClueId,
+    onSelect(id) {
+      selectedClueId = id;
+      renderAll();
+    },
+  });
+  applyHighlight(selectedClueId, clues);
   document.getElementById("btn-undo").disabled = !game.canUndo();
 }
 
