@@ -11,6 +11,7 @@ import { createGameState } from "./state.js";
 import { bindDragDrop } from "./drag-drop.js";
 import { renderClues, applyHighlight } from "./clues.js";
 import { grade } from "./validate.js";
+import { bindTeacherPanel } from "./teacher.js";
 
 const game = createGameState();
 
@@ -128,6 +129,11 @@ document.getElementById("btn-submit").onclick = () => {
     fb.classList.add("bad");
   }
 };
+
+bindTeacherPanel({
+  getPlacement: () => game.getPlacement(),
+  getAnswer: () => game.getAnswer(),
+});
 
 game.loadPuzzle({ answer: FALLBACK_ANSWER, clues: FALLBACK_CLUES, difficulty: "easy" });
 renderAll();
