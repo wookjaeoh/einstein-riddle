@@ -12,7 +12,45 @@
     <p class="tagline">단서를 읽고 다섯 채의 집을 맞혀 보세요</p>
   </header>
   <main id="app">
-    <p>로딩 중…</p>
+    <section class="toolbar" id="toolbar">
+      <label>난이도
+        <select id="difficulty">
+          <option value="easy">쉬움</option>
+          <option value="hard">어려움</option>
+        </select>
+      </label>
+      <button type="button" id="btn-new">새 문제</button>
+      <div class="timer" id="timer" aria-live="polite">00:00</div>
+      <button type="button" id="btn-undo" disabled>되돌리기</button>
+      <button type="button" id="btn-reset">초기화</button>
+      <button type="button" id="btn-submit" class="primary">제출</button>
+      <button type="button" id="btn-teacher">교사</button>
+    </section>
+
+    <p class="help" id="help-easy">카드를 집의 칸으로 끌어다 놓고, 단서를 눌러 관련 칸을 강조해 보세요.</p>
+
+    <div class="layout">
+      <aside id="clues" class="clues" aria-label="단서 목록"></aside>
+      <section class="play">
+        <div id="board" class="board" aria-label="다섯 채의 집"></div>
+        <div id="pool" class="pool" aria-label="카드 풀"></div>
+      </section>
+    </div>
+
+    <p id="feedback" class="feedback" role="status"></p>
+
+    <section id="teacher-panel" class="teacher-panel hidden" aria-hidden="true">
+      <h2>교사 패널</h2>
+      <div id="teacher-login">
+        <input type="password" id="teacher-pw" placeholder="비밀번호" />
+        <button type="button" id="btn-teacher-unlock">열기</button>
+        <p id="teacher-error" class="error"></p>
+      </div>
+      <div id="teacher-body" class="hidden">
+        <div id="answer-board"></div>
+        <div id="compare"></div>
+      </div>
+    </section>
   </main>
   <script type="module" src="js/main.js"></script>
 </body>
