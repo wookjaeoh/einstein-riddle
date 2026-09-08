@@ -13,6 +13,8 @@
     } from "../js/puzzle-data.js";
     import { countWrong, isComplete, grade } from "../js/validate.js";
     import { createGameState } from "../js/state.js";
+    import { countSolutions, isUniqueSolution } from "../js/solver.js";
+    import { generatePuzzle } from "../js/generate.js";
 
     const out = document.getElementById("out");
     let failed = 0;
@@ -31,6 +33,8 @@
     assert(FALLBACK_CLUES.length === 15, "fallback 15 clues");
     assert(DIFFICULTY_TARGETS.easy.min === 12, "easy min");
     assert(DIFFICULTY_TARGETS.hard.max === 11, "hard max");
+    assert(countSolutions([], { limit: 2 }) === 2, "no clues reach solution limit");
+    assert(isUniqueSolution(FALLBACK_CLUES), "fallback clues have one solution");
 
     const empty = Object.fromEntries(CATEGORIES.map((c) => [c, [null, null, null, null, null]]));
     assert(isComplete(empty) === false, "empty incomplete");
@@ -58,6 +62,27 @@
     assert(g.canUndo() === true, "can undo");
     g.undo();
     assert(g.getPlacement().nation[0] == null, "undone");
+
+    const generated = { easy: [], hard: [] };
+    for (const difficulty of ["easy", "hard"]) {
+      const target = DIFFICULTY_TARGETS[difficulty];
+      for (let i = 0; i < 3; i++) {
+        const started = performance.now();
+        const puzzle = generatePuzzle(difficulty);
+        const elapsed = performance.now() - started;
+        generated[difficulty].push(puzzle.meta.clueCount);
+        assert(puzzle.meta.usedFallback || isUniqueSolution(puzzle.clues), `${difficulty} puzzle ${i + 1} unique`);
+        if (difficulty === "easy") {
+          assert(
+            puzzle.meta.usedFallback || (puzzle.clues.length >= target.min && puzzle.clues.length <= target.max),
+            `${difficulty} puzzle ${i + 1} clue target`,
+          );
+        }
+        assert(elapsed < 2000, `${difficulty} puzzle ${i + 1} generated under 2s`);
+      }
+    }
+    const average = (xs) => xs.reduce((sum, n) => sum + n, 0) / xs.length;
+    assert(average(generated.hard) <= average(generated.easy), "hard average clues <= easy");
 
     out.textContent += failed === 0 ? "\nALL PASSED\n" : `\n${failed} FAILED\n`;
   </script>

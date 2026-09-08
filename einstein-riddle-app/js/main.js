@@ -4,14 +4,13 @@ import {
   VALUES,
   LABELS,
   labelOf,
-  FALLBACK_ANSWER,
-  FALLBACK_CLUES,
 } from "./puzzle-data.js";
 import { createGameState } from "./state.js";
 import { bindDragDrop } from "./drag-drop.js";
 import { renderClues, applyHighlight } from "./clues.js";
 import { grade } from "./validate.js";
 import { bindTeacherPanel } from "./teacher.js";
+import { generatePuzzle } from "./generate.js";
 
 const game = createGameState();
 
@@ -111,6 +110,41 @@ document.getElementById("btn-reset").onclick = () => {
   document.getElementById("feedback").textContent = "";
 };
 
+function startNewPuzzle() {
+  const difficulty = document.getElementById("difficulty").value;
+  const button = document.getElementById("btn-new");
+  const feedback = document.getElementById("feedback");
+  button.disabled = true;
+  feedback.className = "feedback";
+  feedback.textContent = "문제 만드는 중…";
+
+  requestAnimationFrame(() => {
+    const puzzle = generatePuzzle(difficulty);
+    game.loadPuzzle({ answer: puzzle.answer, clues: puzzle.clues, difficulty });
+    selectedClueId = null;
+    renderAll();
+    button.disabled = false;
+    feedback.className = "feedback";
+    feedback.textContent = puzzle.meta.usedFallback
+      ? "기본 문제로 시작합니다."
+      : `새 문제 (단서 ${puzzle.meta.clueCount}개)`;
+  });
+}
+
+document.getElementById("btn-new").onclick = () => {
+  if (!confirm("새 문제를 만들까요? 진행 중 배치는 사라집니다.")) return;
+  startNewPuzzle();
+};
+
+document.getElementById("difficulty").onchange = () => {
+  const select = document.getElementById("difficulty");
+  if (!confirm("난이도를 바꾸면 새 문제가 만들어집니다. 계속할까요?")) {
+    select.value = game.getDifficulty();
+    return;
+  }
+  startNewPuzzle();
+};
+
 document.getElementById("btn-submit").onclick = () => {
   const result = grade(game.getPlacement(), game.getAnswer());
   const fb = document.getElementById("feedback");
@@ -135,5 +169,4 @@ bindTeacherPanel({
   getAnswer: () => game.getAnswer(),
 });
 
-game.loadPuzzle({ answer: FALLBACK_ANSWER, clues: FALLBACK_CLUES, difficulty: "easy" });
-renderAll();
+startNewPuzzle();
