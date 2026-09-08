@@ -1,5 +1,8 @@
 import { CATEGORIES, VALUES } from "./puzzle-data.js";
 
+export const SOLVER_ABORTED = Symbol("SOLVER_ABORTED");
+const SUPPORTED_KINDS = new Set(["atHouse", "sameHouse", "nextTo", "leftOf"]);
+
 const permutations = (() => {
   const result = [];
   function visit(prefix, rest) {
@@ -16,6 +19,7 @@ const permutations = (() => {
 })();
 
 function clueCategories(clue) {
+  if (!clue || typeof clue !== "object" || !SUPPORTED_KINDS.has(clue.kind)) return [];
   if (clue.kind === "atHouse") return [clue.cat];
   if (clue.a && clue.b) return [...new Set([clue.a.cat, clue.b.cat])];
   return [];
@@ -34,12 +38,69 @@ function clueHolds(assignment, clue) {
   return false;
 }
 
-export function countSolutions(clues, { limit = 2 } = {}) {
+function isValidClue(clue, valueIndexes) {
+  if (!clueCategories(clue).length) return false;
+  if (clue.kind === "atHouse") {
+    return (
+      clue.cat in valueIndexes &&
+      clue.val in valueIndexes[clue.cat] &&
+      Number.isInteger(clue.houseIndex) &&
+      clue.houseIndex >= 0 &&
+      clue.houseIndex <= 4
+    );
+  }
+  return (
+    clue.a?.cat in valueIndexes &&
+    clue.b?.cat in valueIndexes &&
+    clue.a.val in valueIndexes[clue.a.cat] &&
+    clue.b.val in valueIndexes[clue.b.cat]
+  );
+}
+
+function answerToAssignment(answer) {
+  if (!answer || typeof answer !== "object") return null;
+  const assignment = {};
+  for (const cat of CATEGORIES) {
+    if (
+      !Array.isArray(answer[cat]) ||
+      answer[cat].length !== VALUES[cat].length ||
+      new Set(answer[cat]).size !== VALUES[cat].length ||
+      answer[cat].some((value) => !VALUES[cat].includes(value))
+    ) return null;
+    assignment[cat] = Object.fromEntries(answer[cat].map((value, houseIndex) => [value, houseIndex]));
+  }
+  return assignment;
+}
+
+/**
+ * 알 수 없거나 형식이 잘못된 단서는 해가 없는 것으로 처리한다(fail-closed).
+ * 취소 또는 deadline 도달 시 숫자 대신 SOLVER_ABORTED를 반환한다.
+ */
+export function countSolutions(
+  clues,
+  { limit = 2, shouldAbort, deadline = Infinity } = {},
+) {
   if (!Number.isInteger(limit) || limit < 1) return 0;
   if (!Array.isArray(clues) || clues.some((clue) => !clueCategories(clue).length)) return 0;
 
+  const valueIndexes = Object.fromEntries(
+    CATEGORIES.map((cat) => [cat, Object.fromEntries(VALUES[cat].map((value, index) => [value, index]))]),
+  );
+  if (clues.some((clue) => !isValidClue(clue, valueIndexes))) return 0;
+
+  let aborted = false;
+  const finiteDeadline = Number.isFinite(deadline) ? deadline : Infinity;
+  function abortRequested() {
+    if (aborted) return true;
+    aborted =
+      (typeof shouldAbort === "function" && shouldAbort()) ||
+      Date.now() >= finiteDeadline;
+    return aborted;
+  }
+
   const relevant = Object.fromEntries(CATEGORIES.map((cat) => [cat, []]));
   for (const clue of clues) {
+    if (abortRequested()) return SOLVER_ABORTED;
     for (const cat of clueCategories(clue)) relevant[cat].push(clue);
   }
 
@@ -48,14 +109,11 @@ export function countSolutions(clues, { limit = 2 } = {}) {
     const bUnary = relevant[b].filter((clue) => clueCategories(clue).length === 1).length;
     return bUnary - aUnary || relevant[b].length - relevant[a].length;
   });
-  const valueIndexes = Object.fromEntries(
-    CATEGORIES.map((cat) => [cat, Object.fromEntries(VALUES[cat].map((value, index) => [value, index]))]),
-  );
   const assignment = {};
   let count = 0;
 
   function search(depth) {
-    if (count >= limit) return;
+    if (count >= limit || abortRequested()) return;
     if (depth === categoryOrder.length) {
       count++;
       return;
@@ -63,45 +121,45 @@ export function countSolutions(clues, { limit = 2 } = {}) {
 
     const cat = categoryOrder[depth];
     for (const permutation of permutations) {
+      if (abortRequested()) break;
       const byValue = {};
       for (let valueIndex = 0; valueIndex < 5; valueIndex++) {
+        if (abortRequested()) break;
         byValue[VALUES[cat][valueIndex]] = permutation[valueIndex];
       }
+      if (aborted) break;
       assignment[cat] = byValue;
 
       let valid = true;
       for (const clue of relevant[cat]) {
+        if (abortRequested()) break;
         const cats = clueCategories(clue);
         if (cats.every((name) => assignment[name]) && !clueHolds(assignment, clue)) {
           valid = false;
           break;
         }
       }
+      if (aborted) break;
       if (valid) search(depth + 1);
-      if (count >= limit) break;
+      if (count >= limit || aborted) break;
     }
     delete assignment[cat];
   }
 
-  // Keep the lookup construction above explicit so invalid clue values fail closed.
-  for (const clue of clues) {
-    if (clue.kind === "atHouse") {
-      if (!(clue.cat in valueIndexes) || !(clue.val in valueIndexes[clue.cat])) return 0;
-      if (!Number.isInteger(clue.houseIndex) || clue.houseIndex < 0 || clue.houseIndex > 4) return 0;
-    } else {
-      if (
-        !(clue.a?.cat in valueIndexes) ||
-        !(clue.b?.cat in valueIndexes) ||
-        !(clue.a.val in valueIndexes[clue.a.cat]) ||
-        !(clue.b.val in valueIndexes[clue.b.cat])
-      ) return 0;
-    }
-  }
-
   search(0);
-  return count;
+  return aborted ? SOLVER_ABORTED : count;
 }
 
-export function isUniqueSolution(clues) {
-  return countSolutions(clues, { limit: 2 }) === 1;
+export function isUniqueSolution(clues, options) {
+  return countSolutions(clues, { ...options, limit: 2 }) === 1;
+}
+
+export function answerSatisfiesClues(answer, clues) {
+  if (!Array.isArray(clues)) return false;
+  const valueIndexes = Object.fromEntries(
+    CATEGORIES.map((cat) => [cat, Object.fromEntries(VALUES[cat].map((value, index) => [value, index]))]),
+  );
+  if (clues.some((clue) => !isValidClue(clue, valueIndexes))) return false;
+  const assignment = answerToAssignment(answer);
+  return assignment !== null && clues.every((clue) => clueHolds(assignment, clue));
 }

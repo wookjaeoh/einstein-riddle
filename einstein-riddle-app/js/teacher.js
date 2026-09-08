@@ -10,6 +10,7 @@ export function bindTeacherPanel({ getPlacement, getAnswer }) {
   const err = document.getElementById("teacher-error");
   const body = document.getElementById("teacher-body");
   const login = document.getElementById("teacher-login");
+  let unlocked = false;
 
   btn.addEventListener("click", () => {
     panel.classList.toggle("hidden");
@@ -24,6 +25,7 @@ export function bindTeacherPanel({ getPlacement, getAnswer }) {
     err.textContent = "";
     login.classList.add("hidden");
     body.classList.remove("hidden");
+    unlocked = true;
     renderAnswer();
   });
 
@@ -56,4 +58,10 @@ export function bindTeacherPanel({ getPlacement, getAnswer }) {
     html += `<p>현재 화면 기준 틀린 칸(비교): ${wrong}</p>`;
     answerBoard.innerHTML = html;
   }
+
+  return {
+    refresh() {
+      if (unlocked) renderAnswer();
+    },
+  };
 }

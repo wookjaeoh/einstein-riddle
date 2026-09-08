@@ -13,6 +13,7 @@ import { bindTeacherPanel } from "./teacher.js";
 import { generatePuzzle } from "./generate.js";
 
 const game = createGameState();
+let teacherPanel;
 
 function formatMs(ms) {
   const s = Math.floor(ms / 1000);
@@ -123,6 +124,7 @@ function startNewPuzzle() {
     game.loadPuzzle({ answer: puzzle.answer, clues: puzzle.clues, difficulty });
     selectedClueId = null;
     renderAll();
+    teacherPanel.refresh();
     button.disabled = false;
     feedback.className = "feedback";
     feedback.textContent = puzzle.meta.usedFallback
@@ -164,7 +166,7 @@ document.getElementById("btn-submit").onclick = () => {
   }
 };
 
-bindTeacherPanel({
+teacherPanel = bindTeacherPanel({
   getPlacement: () => game.getPlacement(),
   getAnswer: () => game.getAnswer(),
 });
