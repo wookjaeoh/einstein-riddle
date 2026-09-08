@@ -17,6 +17,8 @@
       SOLVER_ABORTED, answerSatisfiesClues, countSolutions, isUniqueSolution,
     } from "../js/solver.js";
     import { generatePuzzle } from "../js/generate.js";
+    import { bindTeacherPanel } from "../js/teacher.js";
+    import { createDragDrop } from "../js/drag-drop.js";
 
     const out = document.getElementById("out");
     let failed = 0;
@@ -109,6 +111,65 @@
     assert(timedOut.meta.usedFallback, "expired generator budget uses fallback");
     assert(Date.now() - timeoutStarted < 500, "expired generator budget returns promptly");
     assert(isUniqueSolution(timedOut.clues), "fallback path remains unique");
+
+    (function testTeacherPlacementRefresh() {
+      const ids = [
+        "teacher-panel", "btn-teacher", "btn-teacher-unlock", "teacher-pw",
+        "teacher-error", "teacher-body", "teacher-login", "answer-board",
+      ];
+      const elements = Object.fromEntries(ids.map((id) => [id, document.createElement("div")]));
+      elements["teacher-login"].classList.add("hidden");
+      elements["teacher-body"].classList.add("hidden");
+      const prevGet = document.getElementById.bind(document);
+      document.getElementById = (id) => elements[id] ?? prevGet(id);
+      try {
+        let placement = Object.fromEntries(CATEGORIES.map((c) => [c, [null, null, null, null, null]]));
+        const teacher = bindTeacherPanel({
+          getPlacement: () => placement,
+          getAnswer: () => FALLBACK_ANSWER,
+        });
+        elements["teacher-pw"].value = "teacher2026";
+        elements["btn-teacher-unlock"].click();
+        assert(elements["answer-board"].innerHTML.includes("틀린 칸(비교): 25"), "teacher empty placement wrong count");
+        placement = structuredClone(FALLBACK_ANSWER);
+        teacher.refresh();
+        assert(elements["answer-board"].innerHTML.includes("틀린 칸(비교): 0"), "teacher refresh after full placement");
+      } finally {
+        document.getElementById = prevGet;
+      }
+    })();
+
+    (function testDragPointerCancel() {
+      let dropped = false;
+      const card = document.createElement("span");
+      card.className = "card";
+      card.dataset.value = "norway";
+      card.dataset.category = "nation";
+      const root = document.createElement("div");
+      root.appendChild(card);
+      const pool = document.createElement("div");
+      pool.id = "pool";
+      const dragDrop = createDragDrop({
+        boardEl: document.createElement("div"),
+        poolEl: pool,
+        onDrop: () => { dropped = true; },
+        rootEl: root,
+      });
+      dragDrop.bind();
+      dragDrop.handlePointerDown({
+        preventDefault() {},
+        target: card,
+        clientX: 5,
+        clientY: 6,
+        pointerId: 99,
+      });
+      assert(dragDrop.isDragging(), "drag session active");
+      dragDrop.handlePointerCancel({ pointerId: 99, clientX: 5, clientY: 6 });
+      assert(!dragDrop.isDragging(), "cancel clears drag session");
+      assert(!dragDrop.hasGhost(), "cancel removes ghost");
+      assert(!card.classList.contains("dragging"), "cancel removes dragging class");
+      assert(!dropped, "cancel keeps original state without onDrop");
+    })();
 
     out.textContent += failed === 0 ? "\nALL PASSED\n" : `\n${failed} FAILED\n`;
   </script>

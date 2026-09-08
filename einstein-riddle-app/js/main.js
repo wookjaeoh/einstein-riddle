@@ -91,6 +91,7 @@ function renderAll() {
   });
   applyHighlight(selectedClueId, clues);
   document.getElementById("btn-undo").disabled = !game.canUndo();
+  teacherPanel?.refresh?.();
 }
 
 function resolveFrom(value, category) {
@@ -135,7 +136,6 @@ function startNewPuzzle() {
     game.loadPuzzle({ answer: puzzle.answer, clues: puzzle.clues, difficulty });
     selectedClueId = null;
     renderAll();
-    teacherPanel.refresh();
     button.disabled = false;
     feedback.className = "feedback";
     feedback.textContent = puzzle.meta.usedFallback

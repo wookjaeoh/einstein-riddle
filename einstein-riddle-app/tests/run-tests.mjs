@@ -8,6 +8,7 @@ import {
 import * as solver from "../js/solver.js";
 import { generatePuzzle } from "../js/generate.js";
 import { bindTeacherPanel } from "../js/teacher.js";
+import { createDragDrop } from "../js/drag-drop.js";
 
 let failed = 0;
 let passed = 0;
@@ -94,6 +95,175 @@ function testTeacherRefresh() {
   }
 }
 
+function testTeacherRefreshOnPlacementChange() {
+  const ids = [
+    "teacher-panel",
+    "btn-teacher",
+    "btn-teacher-unlock",
+    "teacher-pw",
+    "teacher-error",
+    "teacher-body",
+    "teacher-login",
+    "answer-board",
+  ];
+  const elements = Object.fromEntries(ids.map((id) => [id, fakeElement()]));
+  const previousDocument = globalThis.document;
+  globalThis.document = { getElementById: (id) => elements[id] };
+
+  try {
+    let placement = Object.fromEntries(CATEGORIES.map((cat) => [cat, [null, null, null, null, null]]));
+    const teacher = bindTeacherPanel({
+      getPlacement: () => placement,
+      getAnswer: () => FALLBACK_ANSWER,
+    });
+    elements["teacher-pw"].value = "teacher2026";
+    elements["btn-teacher-unlock"].click();
+    assert(
+      elements["answer-board"].innerHTML.includes("틀린 칸(비교): 25"),
+      "teacher shows all empty cells as wrong",
+    );
+
+    placement = structuredClone(FALLBACK_ANSWER);
+    teacher.refresh();
+    assert(
+      elements["answer-board"].innerHTML.includes("틀린 칸(비교): 0"),
+      "teacher refresh updates comparison after placement matches answer",
+    );
+
+    placement = structuredClone(FALLBACK_ANSWER);
+    placement.animal[0] = "dog";
+    teacher.refresh();
+    assert(
+      elements["answer-board"].innerHTML.includes("틀린 칸(비교): 1"),
+      "teacher refresh updates comparison after card move",
+    );
+  } finally {
+    globalThis.document = previousDocument;
+  }
+}
+
+function testDragCancelCleanup() {
+  let dropped = false;
+  const cardClasses = new Set();
+  const poolClasses = new Set();
+  const cardListeners = {};
+  let ghostNode = null;
+  let ghostRemoved = false;
+
+  const ghost = {
+    style: {},
+    remove() {
+      ghostRemoved = true;
+    },
+  };
+
+  const card = {
+    dataset: { value: "norway", category: "nation" },
+    classList: {
+      add: (...names) => names.forEach((name) => cardClasses.add(name)),
+      remove: (...names) => names.forEach((name) => cardClasses.delete(name)),
+      contains: (name) => cardClasses.has(name),
+    },
+    closest(selector) {
+      return selector === ".card" ? this : null;
+    },
+    cloneNode() {
+      ghostNode = ghost;
+      return ghost;
+    },
+    setPointerCapture() {},
+    releasePointerCapture() {},
+    addEventListener(type, listener) {
+      cardListeners[type] = listener;
+    },
+    removeEventListener(type, listener) {
+      if (cardListeners[type] === listener) delete cardListeners[type];
+    },
+  };
+
+  const rootEl = {
+    listeners: {},
+    addEventListener(type, listener) {
+      this.listeners[type] = listener;
+    },
+  };
+  const poolEl = {
+    classList: {
+      add: (...names) => names.forEach((name) => poolClasses.add(name)),
+      remove: (...names) => names.forEach((name) => poolClasses.delete(name)),
+      contains: (name) => poolClasses.has(name),
+    },
+  };
+  const body = {
+    children: [],
+    appendChild(node) {
+      this.children.push(node);
+    },
+  };
+  const fakeDocument = {
+    body,
+    querySelectorAll() {
+      return [];
+    },
+    elementFromPoint() {
+      return null;
+    },
+  };
+  const fakeWindow = {
+    listeners: {},
+    addEventListener(type, listener) {
+      this.listeners[type] = listener;
+    },
+  };
+
+  const dragDrop = createDragDrop({
+    boardEl: {},
+    poolEl,
+    onDrop: () => {
+      dropped = true;
+    },
+    rootEl,
+    targetDocument: fakeDocument,
+    targetWindow: fakeWindow,
+  });
+  dragDrop.bind();
+
+  rootEl.listeners.pointerdown({
+    preventDefault() {},
+    target: card,
+    clientX: 10,
+    clientY: 20,
+    pointerId: 1,
+  });
+  assert(dragDrop.isDragging(), "drag starts on pointerdown");
+  assert(dragDrop.hasGhost(), "ghost is created while dragging");
+  assert(cardClasses.has("dragging"), "card gets dragging class");
+
+  fakeWindow.listeners.pointercancel({ pointerId: 1, clientX: 10, clientY: 20 });
+  assert(!dragDrop.isDragging(), "pointercancel ends drag session");
+  assert(!dragDrop.hasGhost(), "pointercancel removes ghost");
+  assert(ghostRemoved, "pointercancel calls ghost.remove");
+  assert(!cardClasses.has("dragging"), "pointercancel clears dragging class");
+  assert(!dropped, "pointercancel does not invoke onDrop");
+
+  dropped = false;
+  ghostRemoved = false;
+  cardClasses.clear();
+  rootEl.listeners.pointerdown({
+    preventDefault() {},
+    target: card,
+    clientX: 30,
+    clientY: 40,
+    pointerId: 2,
+  });
+  cardListeners.lostpointercapture?.({ pointerId: 2 });
+  assert(!dragDrop.isDragging(), "lostpointercapture ends drag session");
+  assert(!dragDrop.hasGhost(), "lostpointercapture removes ghost");
+  assert(ghostRemoved, "lostpointercapture calls ghost.remove");
+  assert(!cardClasses.has("dragging"), "lostpointercapture clears dragging class");
+  assert(!dropped, "lostpointercapture does not invoke onDrop");
+}
+
 assert(HOUSES.length === 5, "5 houses");
 assert(CATEGORIES.every((cat) => VALUES[cat].length === 5), "5 values per category");
 assert(solver.countSolutions([], { limit: 2 }) === 2, "no clues reach solution limit");
@@ -148,6 +318,8 @@ if (!easy.meta.usedFallback && !hard.meta.usedFallback) {
 }
 
 testTeacherRefresh();
+testTeacherRefreshOnPlacementChange();
+testDragCancelCleanup();
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exitCode = 1;

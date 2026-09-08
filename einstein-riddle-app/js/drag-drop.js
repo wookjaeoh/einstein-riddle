@@ -1,14 +1,61 @@
-export function bindDragDrop({ boardEl, poolEl, onDrop }) {
-  let dragging = null; // { value, category, el }
+export function createDragDrop({
+  boardEl,
+  poolEl,
+  onDrop,
+  rootEl,
+  targetDocument = document,
+  targetWindow = window,
+}) {
+  let dragging = null; // { value, category, el, pointerId }
   let ghost = null;
 
   function clearTargets() {
-    document.querySelectorAll(".drop-target").forEach((el) => el.classList.remove("drop-target"));
+    targetDocument.querySelectorAll(".drop-target").forEach((el) => el.classList.remove("drop-target"));
   }
 
   function placeGhost(x, y) {
     if (!ghost) return;
     ghost.style.transform = `translate(${x - 40}px, ${y - 20}px)`;
+  }
+
+  function cleanupDrag({ commitDrop = false, event = null } = {}) {
+    if (!dragging) return;
+    const { value, category, el, pointerId } = dragging;
+    dragging = null;
+    clearTargets();
+    el.removeEventListener("lostpointercapture", onLostPointerCapture);
+    if (pointerId != null) {
+      try {
+        el.releasePointerCapture?.(pointerId);
+      } catch {
+        // capture may already be released
+      }
+    }
+    ghost?.remove();
+    ghost = null;
+    el.classList.remove("dragging");
+
+    if (!commitDrop || !event) return;
+
+    const dropTarget = targetDocument.elementFromPoint(event.clientX, event.clientY);
+    const slot = dropTarget?.closest?.(".slot");
+    let to = null;
+    if (slot && slot.dataset.category === category) {
+      to = {
+        type: "slot",
+        houseIndex: Number(slot.dataset.houseIndex),
+        category,
+      };
+    } else if (dropTarget?.closest?.("#pool")) {
+      to = { type: "pool" };
+    }
+    if (!to) return;
+    onDrop({ value, category, to });
+  }
+
+  function onLostPointerCapture(e) {
+    if (!dragging || e.pointerId !== dragging.pointerId) return;
+    cleanupDrag({ commitDrop: false });
   }
 
   function onPointerDown(e) {
@@ -19,6 +66,7 @@ export function bindDragDrop({ boardEl, poolEl, onDrop }) {
       value: card.dataset.value,
       category: card.dataset.category,
       el: card,
+      pointerId: e.pointerId,
     };
     card.classList.add("dragging");
     ghost = card.cloneNode(true);
@@ -27,8 +75,9 @@ export function bindDragDrop({ boardEl, poolEl, onDrop }) {
     ghost.style.zIndex = "9999";
     ghost.style.left = "0";
     ghost.style.top = "0";
-    document.body.appendChild(ghost);
+    targetDocument.body.appendChild(ghost);
     placeGhost(e.clientX, e.clientY);
+    card.addEventListener("lostpointercapture", onLostPointerCapture);
     card.setPointerCapture?.(e.pointerId);
   }
 
@@ -36,7 +85,7 @@ export function bindDragDrop({ boardEl, poolEl, onDrop }) {
     if (!dragging) return;
     placeGhost(e.clientX, e.clientY);
     clearTargets();
-    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const el = targetDocument.elementFromPoint(e.clientX, e.clientY);
     const slot = el?.closest?.(".slot");
     if (slot && slot.dataset.category === dragging.category) {
       slot.classList.add("drop-target");
@@ -46,33 +95,39 @@ export function bindDragDrop({ boardEl, poolEl, onDrop }) {
   }
 
   function onPointerUp(e) {
-    if (!dragging) return;
-    const { value, category, el } = dragging;
-    clearTargets();
-    ghost?.remove();
-    ghost = null;
-    el.classList.remove("dragging");
-
-    const target = document.elementFromPoint(e.clientX, e.clientY);
-    const slot = target?.closest?.(".slot");
-    let to = null;
-    if (slot && slot.dataset.category === category) {
-      to = {
-        type: "slot",
-        houseIndex: Number(slot.dataset.houseIndex),
-        category,
-      };
-    } else if (target?.closest?.("#pool")) {
-      to = { type: "pool" };
-    }
-
-    dragging = null;
-    if (!to) return; // snap back via re-render
-    onDrop({ value, category, to });
+    if (!dragging || e.pointerId !== dragging.pointerId) return;
+    cleanupDrag({ commitDrop: true, event: e });
   }
 
-  const root = document.getElementById("app");
-  root.addEventListener("pointerdown", onPointerDown);
-  window.addEventListener("pointermove", onPointerMove);
-  window.addEventListener("pointerup", onPointerUp);
+  function onPointerCancel(e) {
+    if (!dragging || e.pointerId !== dragging.pointerId) return;
+    cleanupDrag({ commitDrop: false });
+  }
+
+  function bind() {
+    rootEl.addEventListener("pointerdown", onPointerDown);
+    targetWindow.addEventListener("pointermove", onPointerMove);
+    targetWindow.addEventListener("pointerup", onPointerUp);
+    targetWindow.addEventListener("pointercancel", onPointerCancel);
+  }
+
+  return {
+    bind,
+    handlePointerDown: onPointerDown,
+    handlePointerMove: onPointerMove,
+    handlePointerUp: onPointerUp,
+    handlePointerCancel: onPointerCancel,
+    isDragging: () => dragging !== null,
+    hasGhost: () => ghost !== null,
+  };
+}
+
+export function bindDragDrop({ boardEl, poolEl, onDrop }) {
+  const controller = createDragDrop({
+    boardEl,
+    poolEl,
+    onDrop,
+    rootEl: document.getElementById("app"),
+  });
+  controller.bind();
 }
