@@ -10,6 +10,7 @@
   <script type="module">
     import {
       CATEGORIES, VALUES, FALLBACK_ANSWER, FALLBACK_CLUES, HOUSES, DIFFICULTY_TARGETS,
+      DIFFICULTY_PROFILES,
     } from "../js/puzzle-data.js";
     import { countWrong, isComplete, grade } from "../js/validate.js";
     import { createGameState } from "../js/state.js";
@@ -26,6 +27,29 @@
       out.textContent += (cond ? "ok: " : "FAIL: ") + msg + "\n";
       if (!cond) failed++;
     }
+
+    const expectedProfiles = {
+      easy: { houseCount: 4, categories: ["color", "nation", "drink", "food"] },
+      normal: { houseCount: 4, categories: ["color", "nation", "drink", "food", "animal"] },
+      hard: { houseCount: 5, categories: CATEGORIES },
+      expert: { houseCount: 5, categories: CATEGORIES },
+    };
+    for (const [id, expected] of Object.entries(expectedProfiles)) {
+      assert(DIFFICULTY_PROFILES[id].houseCount === expected.houseCount, `${id} house count`);
+      assert(
+        JSON.stringify(DIFFICULTY_PROFILES[id].categories) === JSON.stringify(expected.categories),
+        `${id} categories`,
+      );
+    }
+    assert(
+      countSolutions([], {
+        limit: 2,
+        houseCount: 4,
+        categories: ["color"],
+        values: { color: ["yellow", "blue", "red", "green"] },
+      }) === 2,
+      "variable solver supports 4 houses",
+    );
 
     assert(HOUSES.length === 5, "5 houses");
     assert(CATEGORIES.length === 5, "5 categories");

@@ -74,9 +74,47 @@ export const FALLBACK_CLUES = [
 
 export const CLUES = FALLBACK_CLUES;
 
+export const DIFFICULTY_PROFILES = Object.freeze({
+  easy: Object.freeze({
+    id: "easy",
+    label: "쉬움",
+    houseCount: 4,
+    categories: Object.freeze(["color", "nation", "drink", "food"]),
+    clueRange: Object.freeze([10, 12]),
+    minimize: false,
+  }),
+  normal: Object.freeze({
+    id: "normal",
+    label: "보통",
+    houseCount: 4,
+    categories: Object.freeze([...CATEGORIES]),
+    clueRange: Object.freeze([12, 14]),
+    minimize: false,
+  }),
+  hard: Object.freeze({
+    id: "hard",
+    label: "어려움",
+    houseCount: 5,
+    categories: Object.freeze([...CATEGORIES]),
+    clueRange: Object.freeze([15, 15]),
+    minimize: false,
+  }),
+  expert: Object.freeze({
+    id: "expert",
+    label: "매우 어려움",
+    houseCount: 5,
+    categories: Object.freeze([...CATEGORIES]),
+    clueRange: Object.freeze([12, 14]),
+    minimize: true,
+  }),
+});
+
+// 이전 API를 사용하는 코드가 Task 2에서 전환될 때까지 호환성을 유지한다.
 export const DIFFICULTY_TARGETS = {
-  easy: { min: 12, max: 15 },
-  hard: { min: 8, max: 11 },
+  easy: { min: 10, max: 12 },
+  normal: { min: 12, max: 14 },
+  hard: { min: 15, max: 15 },
+  expert: { min: 12, max: 14 },
 };
 
 export function labelOf(id) {

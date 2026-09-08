@@ -3,7 +3,10 @@ import { CATEGORIES, VALUES } from "./puzzle-data.js";
 export const SOLVER_ABORTED = Symbol("SOLVER_ABORTED");
 const SUPPORTED_KINDS = new Set(["atHouse", "sameHouse", "nextTo", "leftOf"]);
 
-const permutations = (() => {
+const permutationCache = new Map();
+
+function getPermutations(size) {
+  if (permutationCache.has(size)) return permutationCache.get(size);
   const result = [];
   function visit(prefix, rest) {
     if (rest.length === 0) {
@@ -14,9 +17,10 @@ const permutations = (() => {
       visit([...prefix, rest[i]], [...rest.slice(0, i), ...rest.slice(i + 1)]);
     }
   }
-  visit([], [0, 1, 2, 3, 4]);
+  visit([], Array.from({ length: size }, (_, index) => index));
+  permutationCache.set(size, result);
   return result;
-})();
+}
 
 function clueCategories(clue) {
   if (!clue || typeof clue !== "object" || !SUPPORTED_KINDS.has(clue.kind)) return [];
@@ -38,15 +42,16 @@ function clueHolds(assignment, clue) {
   return false;
 }
 
-function isValidClue(clue, valueIndexes) {
+function isValidClue(clue, valueIndexes, houseCount, categories) {
   if (!clueCategories(clue).length) return false;
+  if (clueCategories(clue).some((cat) => !categories.includes(cat))) return false;
   if (clue.kind === "atHouse") {
     return (
       clue.cat in valueIndexes &&
       clue.val in valueIndexes[clue.cat] &&
       Number.isInteger(clue.houseIndex) &&
       clue.houseIndex >= 0 &&
-      clue.houseIndex <= 4
+      clue.houseIndex < houseCount
     );
   }
   return (
@@ -57,15 +62,15 @@ function isValidClue(clue, valueIndexes) {
   );
 }
 
-function answerToAssignment(answer) {
+function answerToAssignment(answer, categories, values, houseCount) {
   if (!answer || typeof answer !== "object") return null;
   const assignment = {};
-  for (const cat of CATEGORIES) {
+  for (const cat of categories) {
     if (
       !Array.isArray(answer[cat]) ||
-      answer[cat].length !== VALUES[cat].length ||
-      new Set(answer[cat]).size !== VALUES[cat].length ||
-      answer[cat].some((value) => !VALUES[cat].includes(value))
+      answer[cat].length !== houseCount ||
+      new Set(answer[cat]).size !== houseCount ||
+      answer[cat].some((value) => !values[cat].includes(value))
     ) return null;
     assignment[cat] = Object.fromEntries(answer[cat].map((value, houseIndex) => [value, houseIndex]));
   }
@@ -78,15 +83,26 @@ function answerToAssignment(answer) {
  */
 export function countSolutions(
   clues,
-  { limit = 2, shouldAbort, deadline = Infinity } = {},
+  {
+    limit = 2,
+    shouldAbort,
+    deadline = Infinity,
+    houseCount = 5,
+    categories = CATEGORIES,
+    values = VALUES,
+  } = {},
 ) {
   if (!Number.isInteger(limit) || limit < 1) return 0;
+  if (!Number.isInteger(houseCount) || houseCount < 1 || houseCount > 5) return 0;
+  if (!Array.isArray(categories) || !categories.length) return 0;
+  if (categories.some((cat) => !CATEGORIES.includes(cat))) return 0;
+  if (categories.some((cat) => !Array.isArray(values[cat]) || values[cat].length !== houseCount)) return 0;
   if (!Array.isArray(clues) || clues.some((clue) => !clueCategories(clue).length)) return 0;
 
   const valueIndexes = Object.fromEntries(
-    CATEGORIES.map((cat) => [cat, Object.fromEntries(VALUES[cat].map((value, index) => [value, index]))]),
+    categories.map((cat) => [cat, Object.fromEntries(values[cat].map((value, index) => [value, index]))]),
   );
-  if (clues.some((clue) => !isValidClue(clue, valueIndexes))) return 0;
+  if (clues.some((clue) => !isValidClue(clue, valueIndexes, houseCount, categories))) return 0;
 
   let aborted = false;
   const finiteDeadline = Number.isFinite(deadline) ? deadline : Infinity;
@@ -98,18 +114,19 @@ export function countSolutions(
     return aborted;
   }
 
-  const relevant = Object.fromEntries(CATEGORIES.map((cat) => [cat, []]));
+  const relevant = Object.fromEntries(categories.map((cat) => [cat, []]));
   for (const clue of clues) {
     if (abortRequested()) return SOLVER_ABORTED;
     for (const cat of clueCategories(clue)) relevant[cat].push(clue);
   }
 
-  const categoryOrder = [...CATEGORIES].sort((a, b) => {
+  const categoryOrder = [...categories].sort((a, b) => {
     const aUnary = relevant[a].filter((clue) => clueCategories(clue).length === 1).length;
     const bUnary = relevant[b].filter((clue) => clueCategories(clue).length === 1).length;
     return bUnary - aUnary || relevant[b].length - relevant[a].length;
   });
   const assignment = {};
+  const permutations = getPermutations(houseCount);
   let count = 0;
 
   function search(depth) {
@@ -123,9 +140,9 @@ export function countSolutions(
     for (const permutation of permutations) {
       if (abortRequested()) break;
       const byValue = {};
-      for (let valueIndex = 0; valueIndex < 5; valueIndex++) {
+      for (let valueIndex = 0; valueIndex < houseCount; valueIndex++) {
         if (abortRequested()) break;
-        byValue[VALUES[cat][valueIndex]] = permutation[valueIndex];
+        byValue[values[cat][valueIndex]] = permutation[valueIndex];
       }
       if (aborted) break;
       assignment[cat] = byValue;
@@ -154,12 +171,21 @@ export function isUniqueSolution(clues, options) {
   return countSolutions(clues, { ...options, limit: 2 }) === 1;
 }
 
-export function answerSatisfiesClues(answer, clues) {
+export function answerSatisfiesClues(
+  answer,
+  clues,
+  {
+    houseCount = 5,
+    categories = CATEGORIES,
+    values = VALUES,
+  } = {},
+) {
   if (!Array.isArray(clues)) return false;
+  if (!Array.isArray(categories) || categories.some((cat) => !CATEGORIES.includes(cat))) return false;
   const valueIndexes = Object.fromEntries(
-    CATEGORIES.map((cat) => [cat, Object.fromEntries(VALUES[cat].map((value, index) => [value, index]))]),
+    categories.map((cat) => [cat, Object.fromEntries(values[cat].map((value, index) => [value, index]))]),
   );
-  if (clues.some((clue) => !isValidClue(clue, valueIndexes))) return false;
-  const assignment = answerToAssignment(answer);
+  if (clues.some((clue) => !isValidClue(clue, valueIndexes, houseCount, categories))) return false;
+  const assignment = answerToAssignment(answer, categories, values, houseCount);
   return assignment !== null && clues.every((clue) => clueHolds(assignment, clue));
 }

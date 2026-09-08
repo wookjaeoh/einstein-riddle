@@ -4,6 +4,7 @@ import {
   FALLBACK_ANSWER,
   FALLBACK_CLUES,
   HOUSES,
+  DIFFICULTY_PROFILES,
 } from "../js/puzzle-data.js";
 import * as solver from "../js/solver.js";
 import { generatePuzzle } from "../js/generate.js";
@@ -263,6 +264,29 @@ function testDragCancelCleanup() {
   assert(!cardClasses.has("dragging"), "lostpointercapture clears dragging class");
   assert(!dropped, "lostpointercapture does not invoke onDrop");
 }
+
+const expectedProfiles = {
+  easy: { houseCount: 4, categories: ["color", "nation", "drink", "food"] },
+  normal: { houseCount: 4, categories: ["color", "nation", "drink", "food", "animal"] },
+  hard: { houseCount: 5, categories: CATEGORIES },
+  expert: { houseCount: 5, categories: CATEGORIES },
+};
+for (const [id, expected] of Object.entries(expectedProfiles)) {
+  assert(DIFFICULTY_PROFILES[id].houseCount === expected.houseCount, `${id} house count`);
+  assert(
+    JSON.stringify(DIFFICULTY_PROFILES[id].categories) === JSON.stringify(expected.categories),
+    `${id} categories`,
+  );
+}
+assert(
+  solver.countSolutions([], {
+    limit: 2,
+    houseCount: 4,
+    categories: ["color"],
+    values: { color: ["yellow", "blue", "red", "green"] },
+  }) === 2,
+  "variable solver supports 4 houses",
+);
 
 assert(HOUSES.length === 5, "5 houses");
 assert(CATEGORIES.every((cat) => VALUES[cat].length === 5), "5 values per category");
