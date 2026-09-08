@@ -15,6 +15,16 @@ import { generatePuzzle } from "./generate.js";
 const game = createGameState();
 let teacherPanel;
 
+const HELP_TEXT = {
+  easy: "카드를 집의 칸으로 끌어다 놓고, 단서를 눌러 관련 칸을 강조해 보세요.",
+  hard: "단서가 더 적습니다. 추론을 더 깊게 하세요.",
+};
+
+function updateHelpText(difficulty) {
+  const el = document.getElementById("help-easy");
+  if (el) el.textContent = HELP_TEXT[difficulty] ?? HELP_TEXT.easy;
+}
+
 function formatMs(ms) {
   const s = Math.floor(ms / 1000);
   const m = Math.floor(s / 60);
@@ -113,6 +123,7 @@ document.getElementById("btn-reset").onclick = () => {
 
 function startNewPuzzle() {
   const difficulty = document.getElementById("difficulty").value;
+  updateHelpText(difficulty);
   const button = document.getElementById("btn-new");
   const feedback = document.getElementById("feedback");
   button.disabled = true;
