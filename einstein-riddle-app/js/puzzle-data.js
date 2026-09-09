@@ -161,10 +161,14 @@ function buildProfileFallback(profile) {
   const { houseCount, categories } = profile;
   const values = sliceProfileValues(houseCount, categories);
   const answer = sliceProfileAnswer(houseCount, categories);
+  let baseClues = FALLBACK_CLUES.filter((clue) =>
+    clueUsesProfile(clue, houseCount, categories, values),
+  );
+  if (profile.id === "expert") {
+    baseClues = baseClues.filter((clue) => clue.id !== "c15");
+  }
   const clues = [
-    ...FALLBACK_CLUES.filter((clue) =>
-      clueUsesProfile(clue, houseCount, categories, values),
-    ),
+    ...baseClues,
     ...(PROFILE_FALLBACK_EXTRAS[profile.id] ?? []),
   ].map((clue) => structuredClone(clue));
   return { houseCount, categories, values, answer, clues };

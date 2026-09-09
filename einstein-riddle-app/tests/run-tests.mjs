@@ -5,10 +5,11 @@ import {
   FALLBACK_CLUES,
   HOUSES,
   DIFFICULTY_PROFILES,
+  PROFILE_FALLBACKS,
 } from "../js/puzzle-data.js";
 import * as solver from "../js/solver.js";
 import { generatePuzzle } from "../js/generate.js";
-import { buildHints } from "../js/hints.js";
+import { buildHints, validateHints } from "../js/hints.js";
 import { bindTeacherPanel } from "../js/teacher.js";
 import { createDragDrop } from "../js/drag-drop.js";
 
@@ -344,17 +345,39 @@ for (const id of ["easy", "normal", "hard", "expert"]) {
     solver.answerSatisfiesClues(puzzle.answer, puzzle.clues, puzzleSolverOptions(puzzle)),
     `${id} answer satisfies clues`,
   );
-  assert(Array.isArray(puzzle.hints) && puzzle.hints.length >= 3, `${id} has staged hints`);
+  assert(Array.isArray(puzzle.hints) && puzzle.hints.length >= 6, `${id} has multiple hint bundles`);
   assert(puzzle.difficulty === id, `${id} difficulty field`);
+  assert(
+    validateHints({
+      hints: puzzle.hints,
+      clues: puzzle.clues,
+      answer: puzzle.answer,
+      houseCount: puzzle.houseCount,
+      categories: puzzle.categories,
+    }),
+    `${id} hints validate against answer and clue indices`,
+  );
+  assert(new Set(puzzle.hints.map((hint) => hint.id)).size === puzzle.hints.length, `${id} hint ids unique`);
 }
 
 const easy = generatePuzzle("easy", { timeLimitMs: 2500, random: seededRandom(7) });
 assert(!easy.categories.includes("animal"), "easy excludes animal");
 assert(!("animal" in easy.answer), "easy answer excludes animal");
 assert(Object.values(easy.values).every((row) => row.length === 4), "easy selects four values");
+assert(easy.hints.length >= 6, "easy has at least two hint bundles");
 assert(easy.hints[0].stage === "direction", "first hint direction");
 assert(easy.hints[1].stage === "clues", "second hint clue guidance");
 assert(easy.hints[2].stage === "fact", "third hint fact");
+assert(
+  easy.hints[1].meta?.clueIndices?.every(
+    (index) => Number.isInteger(index) && index >= 1 && index <= easy.clues.length,
+  ),
+  "hint clue indices are valid",
+);
+assert(
+  easy.hints[2].meta?.val === easy.answer[easy.hints[2].meta.cat]?.[easy.hints[2].meta.houseIndex],
+  "hint fact matches answer placement",
+);
 assert(
   easy.hints[1].text.includes("번") && !easy.hints[1].text.includes("2번과 5번"),
   "hint clue numbers come from generated puzzle",
@@ -362,15 +385,23 @@ assert(
 
 const hard = generatePuzzle("hard", { timeLimitMs: 2500, random: seededRandom(9) });
 const expert = generatePuzzle("expert", { timeLimitMs: 2500, random: seededRandom(13) });
+assert(hard.hints.length >= 9, "hard has at least three hint bundles");
 assert(hard.meta.usedFallback || hard.clues.length === 15, "non-fallback hard has 15 clues");
 assert(
   expert.meta.usedFallback ||
     (expert.clues.length >= 12 && expert.clues.length <= 14),
   "non-fallback expert has 12-14 clues",
 );
-if (!hard.meta.usedFallback && !expert.meta.usedFallback) {
-  assert(expert.clues.length < hard.clues.length, "non-fallback expert has fewer clues than hard");
-}
+assert(hard.clues.length > expert.clues.length, "hard always has more clues than expert");
+assert(
+  PROFILE_FALLBACKS.hard.clues.length > PROFILE_FALLBACKS.expert.clues.length,
+  "hard fallback has more clues than expert fallback",
+);
+assert(
+  PROFILE_FALLBACKS.expert.clues.length >= 12 &&
+    PROFILE_FALLBACKS.expert.clues.length <= 14,
+  "expert fallback stays within 12-14 clues",
+);
 
 const timeoutStarted = Date.now();
 const timedOutPuzzle = generatePuzzle("hard", { timeLimitMs: 0, random: seededRandom(1) });
@@ -387,7 +418,19 @@ assert(easyTimeout.meta.usedFallback, "easy expired budget uses fallback");
 assert(easyTimeout.houseCount === 4, "easy fallback keeps profile house count");
 assert(!easyTimeout.categories.includes("animal"), "easy fallback excludes animal");
 
+const expertTimeout = generatePuzzle("expert", { timeLimitMs: 0, random: seededRandom(3) });
+assert(expertTimeout.meta.usedFallback, "expert expired budget uses fallback");
+assert(
+  expertTimeout.clues.length >= 12 && expertTimeout.clues.length <= 14,
+  "expert fallback clue count in range",
+);
+assert(
+  timedOutPuzzle.clues.length > expertTimeout.clues.length,
+  "hard fallback beats expert fallback clue count",
+);
+
 assert(typeof buildHints === "function", "buildHints export exists");
+assert(typeof validateHints === "function", "validateHints export exists");
 
 testTeacherRefresh();
 testTeacherRefreshOnPlacementChange();

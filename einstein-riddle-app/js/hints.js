@@ -9,104 +9,232 @@ function particle(text, withBatchim, withoutBatchim) {
   return `${text}${hasBatchim(text) ? withBatchim : withoutBatchim}`;
 }
 
-function clueNumber(clues, clueId) {
-  const index = clues.findIndex((clue) => clue.id === clueId);
-  return index >= 0 ? index + 1 : null;
-}
-
 function categoryLabel(cat) {
   return LABELS[cat] ?? cat;
 }
 
-function factTextForAtHouse(clue) {
-  const house = clue.houseIndex + 1;
-  const value = labelOf(clue.val);
-  if (clue.cat === "color") {
-    return `${house}번 집은 ${value} 집으로 확정할 수 있습니다.`;
-  }
-  if (clue.cat === "nation") {
-    return `${house}번 집은 ${value} 사람이 사는 집으로 확정할 수 있습니다.`;
-  }
-  if (clue.cat === "drink") {
-    return `${house}번 집의 음료는 ${value}${hasBatchim(value) ? "으로" : "로"} 확정할 수 있습니다.`;
-  }
-  if (clue.cat === "food") {
-    return `${house}번 집의 음식은 ${value}${hasBatchim(value) ? "으로" : "로"} 확정할 수 있습니다.`;
-  }
-  return `${house}번 집의 ${categoryLabel(clue.cat)}은 ${particle(value, "으로", "로")} 확정할 수 있습니다.`;
+function clueIndex(clues, clueId) {
+  const index = clues.findIndex((clue) => clue.id === clueId);
+  return index >= 0 ? index + 1 : null;
 }
 
-function factTextFromAnswer(answer, categories, houseCount) {
-  const preferred = ["drink", "food", "nation", "color", "animal"].filter((cat) =>
-    categories.includes(cat),
-  );
-  const cat = preferred[0] ?? categories[0];
-  const houseIndex = Math.min(2, houseCount - 1);
-  const value = labelOf(answer[cat][houseIndex]);
+function factTextForPlacement({ cat, val, houseIndex }) {
   const house = houseIndex + 1;
+  const value = labelOf(val);
+  if (cat === "color") {
+    return `${house}번 집은 ${value} 집으로 확정할 수 있습니다.`;
+  }
+  if (cat === "nation") {
+    return `${house}번 집은 ${value} 사람이 사는 집으로 확정할 수 있습니다.`;
+  }
   if (cat === "drink") {
     return `${house}번 집의 음료는 ${value}${hasBatchim(value) ? "으로" : "로"} 확정할 수 있습니다.`;
   }
   if (cat === "food") {
     return `${house}번 집의 음식은 ${value}${hasBatchim(value) ? "으로" : "로"} 확정할 수 있습니다.`;
   }
-  if (cat === "nation") {
-    return `${house}번 집은 ${value} 사람이 사는 집으로 확정할 수 있습니다.`;
-  }
-  if (cat === "color") {
-    return `${house}번 집은 ${value} 집으로 확정할 수 있습니다.`;
-  }
   return `${house}번 집의 ${categoryLabel(cat)}은 ${particle(value, "으로", "로")} 확정할 수 있습니다.`;
 }
 
-function pickCluePair(clues) {
-  const atHouse = clues.filter((clue) => clue.kind === "atHouse");
-  if (atHouse.length >= 2) {
-    return [atHouse[0].id, atHouse[1].id];
+function bundleCount(houseCount, categories) {
+  if (houseCount <= 4 && categories.length <= 4) return 2;
+  return 3;
+}
+
+function directionText(focusKind) {
+  if (focusKind === "atHouse") return "위치가 직접 정해진 단서부터 확인해 보세요.";
+  if (focusKind === "sameHouse") return "같은 집을 연결하는 단서부터 확인해 보세요.";
+  if (focusKind === "nextTo") return "옆집 관계 단서를 먼저 연결해 보세요.";
+  return "왼쪽·오른쪽 위치 단서를 먼저 확인해 보세요.";
+}
+
+function cluesText(firstNum, secondNum) {
+  if (firstNum && secondNum && firstNum !== secondNum) {
+    return `단서 ${firstNum}번과 ${secondNum}번을 함께 연결해 보세요.`;
   }
-  if (atHouse.length === 1 && clues.length >= 2) {
-    const partner = clues.find((clue) => clue.id !== atHouse[0].id);
-    return partner ? [atHouse[0].id, partner.id] : [clues[0].id, clues[1]?.id ?? clues[0].id];
+  return `단서 ${firstNum ?? 1}번을 다른 단서와 함께 연결해 보세요.`;
+}
+
+function factFromClue(clue, answer) {
+  if (clue.kind === "atHouse") {
+    return { cat: clue.cat, val: clue.val, houseIndex: clue.houseIndex };
   }
-  if (clues.length >= 2) {
-    return [clues[0].id, clues[1].id];
+  if (clue.kind === "sameHouse") {
+    const cat = clue.a.cat;
+    const val = clue.a.val;
+    const houseIndex = answer[cat]?.indexOf(val);
+    if (houseIndex >= 0) return { cat, val, houseIndex };
   }
-  return [clues[0]?.id, clues[0]?.id].filter(Boolean);
+  return null;
+}
+
+function factFromAnswer(answer, categories, houseCount, usedFacts) {
+  const preferred = ["drink", "food", "nation", "color", "animal"].filter((cat) =>
+    categories.includes(cat),
+  );
+  for (const cat of preferred) {
+    for (let houseIndex = 0; houseIndex < houseCount; houseIndex++) {
+      const val = answer[cat][houseIndex];
+      const key = `${cat}:${val}:${houseIndex}`;
+      if (usedFacts.has(key)) continue;
+      usedFacts.add(key);
+      return { cat, val, houseIndex };
+    }
+  }
+  const cat = categories[0];
+  return { cat, val: answer[cat][0], houseIndex: 0 };
+}
+
+function pickBundleAnchors(clues, count) {
+  const byKind = {
+    atHouse: clues.filter((c) => c.kind === "atHouse"),
+    sameHouse: clues.filter((c) => c.kind === "sameHouse"),
+    nextTo: clues.filter((c) => c.kind === "nextTo"),
+    leftOf: clues.filter((c) => c.kind === "leftOf"),
+  };
+  const order = ["atHouse", "sameHouse", "nextTo", "leftOf"];
+  const anchors = [];
+  const usedIds = new Set();
+
+  for (const kind of order) {
+    for (const clue of byKind[kind]) {
+      if (anchors.length >= count) break;
+      if (usedIds.has(clue.id)) continue;
+      anchors.push({ focusKind: kind, anchor: clue });
+      usedIds.add(clue.id);
+    }
+    if (anchors.length >= count) break;
+  }
+
+  while (anchors.length < count && clues.length) {
+    const clue = clues[anchors.length % clues.length];
+    if (!usedIds.has(clue.id)) {
+      anchors.push({ focusKind: clue.kind, anchor: clue });
+      usedIds.add(clue.id);
+    } else {
+      anchors.push({ focusKind: clue.kind, anchor: clue });
+    }
+    if (anchors.length >= count) break;
+  }
+
+  return anchors.slice(0, count);
+}
+
+function pickCluePair(clues, anchor, usedPairs) {
+  const anchorIndex = clueIndex(clues, anchor.id);
+  const sameKind = clues.filter((c) => c.kind === anchor.kind && c.id !== anchor.id);
+  for (const partner of sameKind) {
+    const a = Math.min(anchorIndex, clueIndex(clues, partner.id));
+    const b = Math.max(anchorIndex, clueIndex(clues, partner.id));
+    const key = `${a}:${b}`;
+    if (!usedPairs.has(key)) {
+      usedPairs.add(key);
+      return [a, b];
+    }
+  }
+  for (const partner of clues) {
+    if (partner.id === anchor.id) continue;
+    const a = Math.min(anchorIndex, clueIndex(clues, partner.id));
+    const b = Math.max(anchorIndex, clueIndex(clues, partner.id));
+    const key = `${a}:${b}`;
+    if (!usedPairs.has(key)) {
+      usedPairs.add(key);
+      return [a, b];
+    }
+  }
+  return [anchorIndex, anchorIndex];
 }
 
 /**
  * @param {{ clues: object[], answer: object, houseCount: number, categories: string[] }} input
- * @returns {{ id: string, stage: "direction"|"clues"|"fact", text: string }[]}
  */
 export function buildHints({ clues, answer, houseCount, categories }) {
-  if (!Array.isArray(clues) || clues.length === 0) {
-    return [];
+  if (!Array.isArray(clues) || clues.length === 0) return [];
+
+  const bundles = pickBundleAnchors(clues, bundleCount(houseCount, categories));
+  const hints = [];
+  const usedFacts = new Set();
+  const usedPairs = new Set();
+
+  bundles.forEach(({ focusKind, anchor }, index) => {
+    const bundle = index + 1;
+    const [firstNum, secondNum] = pickCluePair(clues, anchor, usedPairs);
+    let factPlacement = factFromClue(anchor, answer);
+    if (!factPlacement) {
+      factPlacement = factFromAnswer(answer, categories, houseCount, usedFacts);
+    } else {
+      usedFacts.add(`${factPlacement.cat}:${factPlacement.val}:${factPlacement.houseIndex}`);
+    }
+
+    hints.push({
+      id: `h${bundle}-direction`,
+      stage: "direction",
+      text: directionText(focusKind),
+      meta: { bundle, focusKind },
+    });
+    hints.push({
+      id: `h${bundle}-clues`,
+      stage: "clues",
+      text: cluesText(firstNum, secondNum),
+      meta: { bundle, clueIndices: [firstNum, secondNum].filter(Boolean) },
+    });
+    hints.push({
+      id: `h${bundle}-fact`,
+      stage: "fact",
+      text: factTextForPlacement(factPlacement),
+      meta: {
+        bundle,
+        cat: factPlacement.cat,
+        val: factPlacement.val,
+        houseIndex: factPlacement.houseIndex,
+      },
+    });
+  });
+
+  return hints;
+}
+
+/**
+ * @param {{ hints: object[], clues: object[], answer: object, houseCount: number, categories: string[] }} input
+ */
+export function validateHints({ hints, clues, answer, houseCount, categories }) {
+  if (!Array.isArray(hints) || hints.length < 6) return false;
+  if (!Array.isArray(clues) || !clues.length) return false;
+  if (!answer || typeof answer !== "object") return false;
+
+  const ids = new Set();
+  for (const hint of hints) {
+    if (!hint?.id || ids.has(hint.id)) return false;
+    ids.add(hint.id);
   }
 
-  const atHouseClues = clues.filter((clue) => clue.kind === "atHouse");
-  const [firstId, secondId] = pickCluePair(clues);
-  const firstNum = clueNumber(clues, firstId);
-  const secondNum = clueNumber(clues, secondId);
-  const anchorClue = atHouseClues[0] ?? clues[0];
+  const byBundle = new Map();
+  for (const hint of hints) {
+    const bundle = hint.meta?.bundle;
+    if (!Number.isInteger(bundle)) return false;
+    if (!byBundle.has(bundle)) byBundle.set(bundle, []);
+    byBundle.get(bundle).push(hint);
+  }
+  if (byBundle.size < 2) return false;
 
-  const directionText =
-    atHouseClues.length > 0
-      ? "위치가 직접 정해진 단서부터 확인해 보세요."
-      : "같은 집을 연결하는 단서부터 확인해 보세요.";
+  for (const [, group] of byBundle) {
+    if (group.length !== 3) return false;
+    const stages = group.map((hint) => hint.stage);
+    if (stages[0] !== "direction" || stages[1] !== "clues" || stages[2] !== "fact") return false;
 
-  const cluesText =
-    firstNum && secondNum && firstNum !== secondNum
-      ? `단서 ${firstNum}번과 ${secondNum}번을 함께 연결해 보세요.`
-      : `단서 ${firstNum ?? 1}번을 다른 단서와 함께 연결해 보세요.`;
+    const cluesHint = group.find((hint) => hint.stage === "clues");
+    const indices = cluesHint?.meta?.clueIndices;
+    if (!Array.isArray(indices) || !indices.length) return false;
+    if (indices.some((index) => !Number.isInteger(index) || index < 1 || index > clues.length)) {
+      return false;
+    }
 
-  const factText =
-    anchorClue?.kind === "atHouse"
-      ? factTextForAtHouse(anchorClue)
-      : factTextFromAnswer(answer, categories, houseCount);
+    const factHint = group.find((hint) => hint.stage === "fact");
+    const { cat, val, houseIndex } = factHint?.meta ?? {};
+    if (!categories.includes(cat)) return false;
+    if (!Number.isInteger(houseIndex) || houseIndex < 0 || houseIndex >= houseCount) return false;
+    if (answer[cat]?.[houseIndex] !== val) return false;
+  }
 
-  return [
-    { id: "h1-direction", stage: "direction", text: directionText },
-    { id: "h1-clues", stage: "clues", text: cluesText },
-    { id: "h1-fact", stage: "fact", text: factText },
-  ];
+  return true;
 }

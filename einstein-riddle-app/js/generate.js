@@ -177,8 +177,11 @@ function buildCandidateClues(answer, categories, houseCount) {
   return clues;
 }
 
-function orderPool(pool, random) {
-  const strength = { leftOf: 0, atHouse: 1, sameHouse: 1, nextTo: 2 };
+function orderPool(pool, random, profile) {
+  const strength =
+    profile?.minimize
+      ? { atHouse: 0, sameHouse: 0, leftOf: 1, nextTo: 2 }
+      : { leftOf: 0, atHouse: 1, sameHouse: 1, nextTo: 2 };
   const buckets = [[], [], []];
   for (const clue of pool) buckets[strength[clue.kind]].push(clue);
   return buckets.flatMap((bucket) => shuffle(bucket, random));
@@ -188,13 +191,17 @@ function uniqueBeforeDeadline(clues, solverCtx, deadline) {
   return countSolutions(clues, { ...solverCtx, limit: 2, deadline });
 }
 
-function shrinkWhileUnique(working, stopAt, solverCtx, deadline, random) {
+function shrinkWhileUnique(working, stopAt, solverCtx, deadline, random, maxRemovals = Infinity) {
+  let removals = 0;
   for (const clue of shuffle(working, random)) {
-    if (Date.now() >= deadline || working.length <= stopAt) break;
+    if (Date.now() >= deadline || working.length <= stopAt || removals >= maxRemovals) break;
     const trial = working.filter((item) => item.id !== clue.id);
     const result = uniqueBeforeDeadline(trial, solverCtx, deadline);
     if (result === SOLVER_ABORTED) return { working, aborted: true };
-    if (result === 1) working = trial;
+    if (result === 1) {
+      working = trial;
+      removals++;
+    }
   }
   return { working, aborted: Date.now() >= deadline };
 }
@@ -252,11 +259,45 @@ function verifiedFallback(difficulty) {
   );
 }
 
-export function generatePuzzle(
-  difficulty,
-  { timeLimitMs = DEFAULT_TIME_LIMIT_MS, random = Math.random } = {},
-) {
-  const profile = DIFFICULTY_PROFILES[difficulty] ?? DIFFICULTY_PROFILES.easy;
+function shrinkHardPuzzleToExpert(hardPuzzle, random, deadline) {
+  const [targetMin, targetMax] = DIFFICULTY_PROFILES.expert.clueRange;
+  const ctx = {
+    houseCount: hardPuzzle.houseCount,
+    categories: hardPuzzle.categories,
+    values: hardPuzzle.values,
+    answer: hardPuzzle.answer,
+  };
+  const solverCtx = solverOptions(ctx);
+  let working = hardPuzzle.clues.map((clue) => structuredClone(clue));
+
+  for (let stop = Math.min(working.length - 1, targetMax); stop >= targetMin; stop--) {
+    if (working.length > stop) {
+      const shrunk = shrinkWhileUnique(
+        working,
+        stop,
+        solverCtx,
+        deadline,
+        random,
+        working.length - stop,
+      );
+      working = shrunk.working;
+    }
+    if (
+      working.length >= targetMin &&
+      working.length <= targetMax &&
+      isUniqueSolution(working, solverCtx) &&
+      answerSatisfiesClues(ctx.answer, working, solverCtx)
+    ) {
+      return finalizePuzzle(ctx, working, "expert", {
+        usedFallback: false,
+        clueCount: working.length,
+      });
+    }
+  }
+  return null;
+}
+
+function generateStandardPuzzle(profile, { timeLimitMs = DEFAULT_TIME_LIMIT_MS, random = Math.random } = {}) {
   const [targetMin, targetMax] = profile.clueRange;
   const safeTimeLimit =
     Number.isFinite(timeLimitMs) && timeLimitMs >= 0
@@ -268,7 +309,11 @@ export function generatePuzzle(
     if (Date.now() >= deadline) break;
     const ctx = buildRuntimeContext(profile, random);
     const solverCtx = solverOptions(ctx);
-    const pool = orderPool(buildCandidateClues(ctx.answer, ctx.categories, ctx.houseCount), random);
+    const pool = orderPool(
+      buildCandidateClues(ctx.answer, ctx.categories, ctx.houseCount),
+      random,
+      profile,
+    );
     const selected = [];
     let selectedResult = 0;
 
@@ -282,22 +327,11 @@ export function generatePuzzle(
     if (selectedResult === SOLVER_ABORTED) break;
     if (selectedResult !== 1) continue;
 
-    const stopAt = profile.minimize ? targetMin : targetMin;
-    const shrunk = shrinkWhileUnique([...selected], stopAt, solverCtx, deadline, random);
+    const shrunk = shrinkWhileUnique([...selected], targetMin, solverCtx, deadline, random);
     if (shrunk.aborted) break;
     let working = shrunk.working;
 
-    if (profile.minimize) {
-      const minimized = shrinkWhileUnique(working, 1, solverCtx, deadline, random);
-      if (minimized.aborted) break;
-      working = minimized.working;
-      if (working.length > targetMax) continue;
-      if (working.length < targetMin) {
-        const grown = growWhileUnique(working, targetMin, pool, solverCtx, deadline);
-        if (grown.aborted) break;
-        working = grown.working;
-      }
-    } else if (working.length < targetMax) {
+    if (working.length < targetMax) {
       const grown = growWhileUnique(working, targetMax, pool, solverCtx, deadline);
       if (grown.aborted) break;
       working = grown.working;
@@ -317,4 +351,35 @@ export function generatePuzzle(
   }
 
   return verifiedFallback(profile.id);
+}
+
+export function generatePuzzle(
+  difficulty,
+  { timeLimitMs = DEFAULT_TIME_LIMIT_MS, random = Math.random } = {},
+) {
+  const profile = DIFFICULTY_PROFILES[difficulty] ?? DIFFICULTY_PROFILES.easy;
+
+  if (profile.id === "expert") {
+    const safeTimeLimit =
+      Number.isFinite(timeLimitMs) && timeLimitMs >= 0
+        ? timeLimitMs
+        : DEFAULT_TIME_LIMIT_MS;
+    const shrinkBudget = Math.max(250, Math.floor(safeTimeLimit / 5));
+    const hardBudget = Math.max(0, safeTimeLimit - shrinkBudget);
+    const hardPuzzle = generateStandardPuzzle(DIFFICULTY_PROFILES.hard, {
+      timeLimitMs: hardBudget,
+      random,
+    });
+    if (!hardPuzzle.meta.usedFallback && hardPuzzle.clues.length === 15) {
+      const expertPuzzle = shrinkHardPuzzleToExpert(
+        hardPuzzle,
+        random,
+        Date.now() + shrinkBudget,
+      );
+      if (expertPuzzle) return expertPuzzle;
+    }
+    return verifiedFallback("expert");
+  }
+
+  return generateStandardPuzzle(profile, { timeLimitMs, random });
 }

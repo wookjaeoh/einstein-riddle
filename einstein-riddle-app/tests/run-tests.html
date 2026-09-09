@@ -10,7 +10,7 @@
   <script type="module">
     import {
       CATEGORIES, VALUES, FALLBACK_ANSWER, FALLBACK_CLUES, HOUSES, DIFFICULTY_TARGETS,
-      DIFFICULTY_PROFILES,
+      DIFFICULTY_PROFILES, PROFILE_FALLBACKS,
     } from "../js/puzzle-data.js";
     import { countWrong, isComplete, grade } from "../js/validate.js";
     import { createGameState } from "../js/state.js";
@@ -18,7 +18,7 @@
       SOLVER_ABORTED, answerSatisfiesClues, countSolutions, isUniqueSolution,
     } from "../js/solver.js";
     import { generatePuzzle } from "../js/generate.js";
-    import { buildHints } from "../js/hints.js";
+    import { buildHints, validateHints } from "../js/hints.js";
     import { bindTeacherPanel } from "../js/teacher.js";
     import { createDragDrop } from "../js/drag-drop.js";
 
@@ -128,29 +128,60 @@
         answerSatisfiesClues(puzzle.answer, puzzle.clues, puzzleSolverOptions(puzzle)),
         `${id} answer satisfies clues`,
       );
-      assert(Array.isArray(puzzle.hints) && puzzle.hints.length >= 3, `${id} has staged hints`);
+      assert(Array.isArray(puzzle.hints) && puzzle.hints.length >= 6, `${id} has multiple hint bundles`);
       assert(puzzle.difficulty === id, `${id} difficulty field`);
+      assert(
+        validateHints({
+          hints: puzzle.hints,
+          clues: puzzle.clues,
+          answer: puzzle.answer,
+          houseCount: puzzle.houseCount,
+          categories: puzzle.categories,
+        }),
+        `${id} hints validate against answer and clue indices`,
+      );
+      assert(new Set(puzzle.hints.map((hint) => hint.id)).size === puzzle.hints.length, `${id} hint ids unique`);
     }
 
     const easyGenerated = generatePuzzle("easy", { timeLimitMs: 2500 });
     assert(!easyGenerated.categories.includes("animal"), "easy excludes animal");
     assert(!("animal" in easyGenerated.answer), "easy answer excludes animal");
     assert(Object.values(easyGenerated.values).every((row) => row.length === 4), "easy selects four values");
+    assert(easyGenerated.hints.length >= 6, "easy has at least two hint bundles");
     assert(easyGenerated.hints[0].stage === "direction", "first hint direction");
     assert(easyGenerated.hints[1].stage === "clues", "second hint clue guidance");
     assert(easyGenerated.hints[2].stage === "fact", "third hint fact");
+    assert(
+      easyGenerated.hints[1].meta?.clueIndices?.every(
+        (index) => Number.isInteger(index) && index >= 1 && index <= easyGenerated.clues.length,
+      ),
+      "hint clue indices are valid",
+    );
+    assert(
+      easyGenerated.hints[2].meta?.val ===
+        easyGenerated.answer[easyGenerated.hints[2].meta.cat]?.[easyGenerated.hints[2].meta.houseIndex],
+      "hint fact matches answer placement",
+    );
 
     const hardGenerated = generatePuzzle("hard", { timeLimitMs: 2500 });
     const expertGenerated = generatePuzzle("expert", { timeLimitMs: 2500 });
+    assert(hardGenerated.hints.length >= 9, "hard has at least three hint bundles");
     assert(hardGenerated.meta.usedFallback || hardGenerated.clues.length === 15, "non-fallback hard has 15 clues");
     assert(
       expertGenerated.meta.usedFallback ||
         (expertGenerated.clues.length >= 12 && expertGenerated.clues.length <= 14),
       "non-fallback expert has 12-14 clues",
     );
-    if (!hardGenerated.meta.usedFallback && !expertGenerated.meta.usedFallback) {
-      assert(expertGenerated.clues.length < hardGenerated.clues.length, "expert fewer clues than hard");
-    }
+    assert(hardGenerated.clues.length > expertGenerated.clues.length, "hard always has more clues than expert");
+    assert(
+      PROFILE_FALLBACKS.hard.clues.length > PROFILE_FALLBACKS.expert.clues.length,
+      "hard fallback has more clues than expert fallback",
+    );
+    assert(
+      PROFILE_FALLBACKS.expert.clues.length >= 12 &&
+        PROFILE_FALLBACKS.expert.clues.length <= 14,
+      "expert fallback stays within 12-14 clues",
+    );
 
     const generated = { easy: [], hard: [] };
     for (const difficulty of ["easy", "hard"]) {
@@ -178,7 +209,19 @@
     assert(isUniqueSolution(timedOut.clues, puzzleSolverOptions(timedOut)), "fallback path remains unique");
     assert(timedOut.houseCount === 5, "hard fallback keeps profile house count");
 
+    const expertTimeout = generatePuzzle("expert", { timeLimitMs: 0 });
+    assert(expertTimeout.meta.usedFallback, "expert expired budget uses fallback");
+    assert(
+      expertTimeout.clues.length >= 12 && expertTimeout.clues.length <= 14,
+      "expert fallback clue count in range",
+    );
+    assert(
+      timedOut.clues.length > expertTimeout.clues.length,
+      "hard fallback beats expert fallback clue count",
+    );
+
     assert(typeof buildHints === "function", "buildHints export exists");
+    assert(typeof validateHints === "function", "validateHints export exists");
 
     (function testTeacherPlacementRefresh() {
       const ids = [
