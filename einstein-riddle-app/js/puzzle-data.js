@@ -120,3 +120,87 @@ export const DIFFICULTY_TARGETS = {
 export function labelOf(id) {
   return LABELS[id] ?? id;
 }
+
+function sliceProfileValues(houseCount, categories) {
+  return Object.fromEntries(
+    categories.map((cat) => [cat, VALUES[cat].slice(0, houseCount)]),
+  );
+}
+
+function sliceProfileAnswer(houseCount, categories) {
+  return Object.fromEntries(
+    categories.map((cat) => [cat, FALLBACK_ANSWER[cat].slice(0, houseCount)]),
+  );
+}
+
+function clueUsesProfile(clue, houseCount, categories, values) {
+  const cats =
+    clue.kind === "atHouse"
+      ? [clue.cat]
+      : clue.a && clue.b
+        ? [clue.a.cat, clue.b.cat]
+        : [];
+  if (!cats.length || cats.some((cat) => !categories.includes(cat))) return false;
+
+  if (clue.kind === "atHouse") {
+    return (
+      values[clue.cat]?.includes(clue.val) &&
+      Number.isInteger(clue.houseIndex) &&
+      clue.houseIndex >= 0 &&
+      clue.houseIndex < houseCount
+    );
+  }
+
+  return (
+    values[clue.a.cat]?.includes(clue.a.val) &&
+    values[clue.b.cat]?.includes(clue.b.val)
+  );
+}
+
+function buildProfileFallback(profile) {
+  const { houseCount, categories } = profile;
+  const values = sliceProfileValues(houseCount, categories);
+  const answer = sliceProfileAnswer(houseCount, categories);
+  const clues = [
+    ...FALLBACK_CLUES.filter((clue) =>
+      clueUsesProfile(clue, houseCount, categories, values),
+    ),
+    ...(PROFILE_FALLBACK_EXTRAS[profile.id] ?? []),
+  ].map((clue) => structuredClone(clue));
+  return { houseCount, categories, values, answer, clues };
+}
+
+const PROFILE_FALLBACK_EXTRAS = {
+  easy: [
+    {
+      id: "e10",
+      kind: "atHouse",
+      cat: "color",
+      val: "yellow",
+      houseIndex: 0,
+      houseIds: [1],
+      categories: ["color"],
+      values: ["yellow"],
+      text: "1번 집은 노랑 집이다.",
+    },
+  ],
+  normal: [
+    {
+      id: "n13",
+      kind: "atHouse",
+      cat: "color",
+      val: "yellow",
+      houseIndex: 0,
+      houseIds: [1],
+      categories: ["color"],
+      values: ["yellow"],
+      text: "1번 집은 노랑 집이다.",
+    },
+  ],
+};
+
+export const PROFILE_FALLBACKS = Object.freeze(
+  Object.fromEntries(
+    Object.keys(DIFFICULTY_PROFILES).map((id) => [id, buildProfileFallback(DIFFICULTY_PROFILES[id])]),
+  ),
+);

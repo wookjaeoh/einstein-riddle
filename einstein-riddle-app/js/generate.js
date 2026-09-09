@@ -1,9 +1,7 @@
 import {
-  CATEGORIES,
   VALUES,
-  DIFFICULTY_TARGETS,
-  FALLBACK_ANSWER,
-  FALLBACK_CLUES,
+  DIFFICULTY_PROFILES,
+  PROFILE_FALLBACKS,
   labelOf,
 } from "./puzzle-data.js";
 import {
@@ -12,6 +10,7 @@ import {
   countSolutions,
   isUniqueSolution,
 } from "./solver.js";
+import { buildHints } from "./hints.js";
 
 const DEFAULT_TIME_LIMIT_MS = 1800;
 
@@ -22,10 +21,6 @@ function shuffle(items, random) {
     [result[i], result[j]] = [result[j], result[i]];
   }
   return result;
-}
-
-function randomAnswer(random) {
-  return Object.fromEntries(CATEGORIES.map((cat) => [cat, shuffle(VALUES[cat], random)]));
 }
 
 function hasBatchim(text) {
@@ -46,9 +41,9 @@ function descriptor({ cat, val }) {
   return `${particle(value, "을", "를")} 기르는 집`;
 }
 
-function sameHouseText(a, b) {
+function sameHouseText(a, b, categories) {
   const pair = [a, b].sort(
-    (x, y) => CATEGORIES.indexOf(x.cat) - CATEGORIES.indexOf(y.cat),
+    (x, y) => categories.indexOf(x.cat) - categories.indexOf(y.cat),
   );
   const [first, second] = pair;
   const aLabel = labelOf(first.val);
@@ -79,14 +74,33 @@ function atHouseText(cat, val, houseIndex) {
   return `${house}번 집에 사는 사람은 ${particle(value, "을", "를")} 기른다.`;
 }
 
-function buildCandidateClues(answer) {
+function buildRuntimeContext(profile, random) {
+  const { houseCount, categories } = profile;
+  const values = Object.fromEntries(
+    categories.map((cat) => [cat, shuffle(VALUES[cat], random).slice(0, houseCount)]),
+  );
+  const answer = Object.fromEntries(
+    categories.map((cat) => [cat, shuffle(values[cat], random)]),
+  );
+  return { houseCount, categories, values, answer };
+}
+
+function solverOptions(ctx) {
+  return {
+    houseCount: ctx.houseCount,
+    categories: ctx.categories,
+    values: ctx.values,
+  };
+}
+
+function buildCandidateClues(answer, categories, houseCount) {
   const clues = [];
   let nextId = 1;
   const add = (clue) => clues.push({ id: `g${nextId++}`, ...clue });
   const point = (cat, houseIndex) => ({ cat, val: answer[cat][houseIndex] });
 
-  for (const cat of CATEGORIES) {
-    for (let houseIndex = 0; houseIndex < 5; houseIndex++) {
+  for (const cat of categories) {
+    for (let houseIndex = 0; houseIndex < houseCount; houseIndex++) {
       const val = answer[cat][houseIndex];
       add({
         kind: "atHouse",
@@ -101,11 +115,11 @@ function buildCandidateClues(answer) {
     }
   }
 
-  for (let i = 0; i < CATEGORIES.length; i++) {
-    for (let j = i + 1; j < CATEGORIES.length; j++) {
-      const catA = CATEGORIES[i];
-      const catB = CATEGORIES[j];
-      for (let houseIndex = 0; houseIndex < 5; houseIndex++) {
+  for (let i = 0; i < categories.length; i++) {
+    for (let j = i + 1; j < categories.length; j++) {
+      const catA = categories[i];
+      const catB = categories[j];
+      for (let houseIndex = 0; houseIndex < houseCount; houseIndex++) {
         const a = point(catA, houseIndex);
         const b = point(catB, houseIndex);
         add({
@@ -114,10 +128,10 @@ function buildCandidateClues(answer) {
           b,
           categories: [catA, catB],
           values: [a.val, b.val],
-          text: sameHouseText(a, b),
+          text: sameHouseText(a, b, categories),
         });
       }
-      for (let houseIndex = 0; houseIndex < 4; houseIndex++) {
+      for (let houseIndex = 0; houseIndex < houseCount - 1; houseIndex++) {
         for (const [a, b] of [
           [point(catA, houseIndex), point(catB, houseIndex + 1)],
           [point(catB, houseIndex), point(catA, houseIndex + 1)],
@@ -145,8 +159,8 @@ function buildCandidateClues(answer) {
     }
   }
 
-  for (const cat of CATEGORIES) {
-    for (let houseIndex = 0; houseIndex < 4; houseIndex++) {
+  for (const cat of categories) {
+    for (let houseIndex = 0; houseIndex < houseCount - 1; houseIndex++) {
       const a = point(cat, houseIndex);
       const b = point(cat, houseIndex + 1);
       add({
@@ -170,42 +184,80 @@ function orderPool(pool, random) {
   return buckets.flatMap((bucket) => shuffle(bucket, random));
 }
 
-function uniqueBeforeDeadline(clues, deadline) {
-  return countSolutions(clues, { limit: 2, deadline });
+function uniqueBeforeDeadline(clues, solverCtx, deadline) {
+  return countSolutions(clues, { ...solverCtx, limit: 2, deadline });
 }
 
-function shrinkWhileUnique(working, stopAt, deadline, random) {
+function shrinkWhileUnique(working, stopAt, solverCtx, deadline, random) {
   for (const clue of shuffle(working, random)) {
     if (Date.now() >= deadline || working.length <= stopAt) break;
     const trial = working.filter((item) => item.id !== clue.id);
-    const result = uniqueBeforeDeadline(trial, deadline);
+    const result = uniqueBeforeDeadline(trial, solverCtx, deadline);
     if (result === SOLVER_ABORTED) return { working, aborted: true };
     if (result === 1) working = trial;
   }
   return { working, aborted: Date.now() >= deadline };
 }
 
-function verifiedFallback() {
-  if (!isUniqueSolution(FALLBACK_CLUES)) {
-    throw new Error("폴백 단서가 유일해가 아닙니다.");
+function growWhileUnique(working, targetCount, pool, solverCtx, deadline) {
+  if (working.length >= targetCount) return { working, aborted: Date.now() >= deadline };
+  for (const clue of pool) {
+    if (Date.now() >= deadline || working.length >= targetCount) break;
+    if (working.some((item) => item.id === clue.id)) continue;
+    const trial = [...working, clue];
+    const result = uniqueBeforeDeadline(trial, solverCtx, deadline);
+    if (result === SOLVER_ABORTED) return { working, aborted: true };
+    if (result === 1) working = trial;
   }
-  if (!answerSatisfiesClues(FALLBACK_ANSWER, FALLBACK_CLUES)) {
-    throw new Error("폴백 정답이 폴백 단서를 만족하지 않습니다.");
-  }
+  return { working, aborted: Date.now() >= deadline };
+}
+
+function finalizePuzzle(ctx, clues, difficulty, meta) {
   return {
-    answer: structuredClone(FALLBACK_ANSWER),
-    clues: FALLBACK_CLUES.map((clue) => structuredClone(clue)),
-    meta: { usedFallback: true, clueCount: FALLBACK_CLUES.length },
+    houseCount: ctx.houseCount,
+    categories: [...ctx.categories],
+    values: structuredClone(ctx.values),
+    answer: structuredClone(ctx.answer),
+    clues,
+    hints: buildHints({
+      clues,
+      answer: ctx.answer,
+      houseCount: ctx.houseCount,
+      categories: ctx.categories,
+    }),
+    difficulty,
+    meta,
   };
+}
+
+function verifiedFallback(difficulty) {
+  const profile = DIFFICULTY_PROFILES[difficulty] ?? DIFFICULTY_PROFILES.easy;
+  const fallback = PROFILE_FALLBACKS[profile.id];
+  const solverCtx = {
+    houseCount: fallback.houseCount,
+    categories: fallback.categories,
+    values: fallback.values,
+  };
+  if (!isUniqueSolution(fallback.clues, solverCtx)) {
+    throw new Error(`${profile.id} 폴백 단서가 유일해가 아닙니다.`);
+  }
+  if (!answerSatisfiesClues(fallback.answer, fallback.clues, solverCtx)) {
+    throw new Error(`${profile.id} 폴백 정답이 폴백 단서를 만족하지 않습니다.`);
+  }
+  return finalizePuzzle(
+    fallback,
+    fallback.clues.map((clue) => structuredClone(clue)),
+    profile.id,
+    { usedFallback: true, clueCount: fallback.clues.length },
+  );
 }
 
 export function generatePuzzle(
   difficulty,
   { timeLimitMs = DEFAULT_TIME_LIMIT_MS, random = Math.random } = {},
 ) {
-  const normalizedDifficulty = difficulty in DIFFICULTY_TARGETS ? difficulty : "easy";
-  const target = DIFFICULTY_TARGETS[normalizedDifficulty];
-  const preferMax = normalizedDifficulty === "easy";
+  const profile = DIFFICULTY_PROFILES[difficulty] ?? DIFFICULTY_PROFILES.easy;
+  const [targetMin, targetMax] = profile.clueRange;
   const safeTimeLimit =
     Number.isFinite(timeLimitMs) && timeLimitMs >= 0
       ? timeLimitMs
@@ -214,47 +266,55 @@ export function generatePuzzle(
 
   for (let attempt = 0; attempt < 20; attempt++) {
     if (Date.now() >= deadline) break;
-    const answer = randomAnswer(random);
-    const pool = orderPool(buildCandidateClues(answer), random);
+    const ctx = buildRuntimeContext(profile, random);
+    const solverCtx = solverOptions(ctx);
+    const pool = orderPool(buildCandidateClues(ctx.answer, ctx.categories, ctx.houseCount), random);
     const selected = [];
     let selectedResult = 0;
 
     for (const clue of pool) {
       if (Date.now() >= deadline) break;
       selected.push(clue);
-      selectedResult = uniqueBeforeDeadline(selected, deadline);
+      selectedResult = uniqueBeforeDeadline(selected, solverCtx, deadline);
       if (selectedResult === SOLVER_ABORTED || selectedResult === 1) break;
-      if (selected.length > 35) break;
+      if (selected.length > 40) break;
     }
     if (selectedResult === SOLVER_ABORTED) break;
     if (selectedResult !== 1) continue;
 
-    const shrunk = shrinkWhileUnique([...selected], target.min, deadline, random);
+    const stopAt = profile.minimize ? targetMin : targetMin;
+    const shrunk = shrinkWhileUnique([...selected], stopAt, solverCtx, deadline, random);
     if (shrunk.aborted) break;
     let working = shrunk.working;
-    if (preferMax && working.length < target.max) {
-      for (const clue of pool) {
-        if (Date.now() >= deadline || working.length >= target.max) break;
-        if (working.some((item) => item.id === clue.id)) continue;
-        // answer에서 만든 참인 단서를 유일해 집합에 더해도 기존 유일해는 유지된다.
-        working = [...working, clue];
+
+    if (profile.minimize) {
+      const minimized = shrinkWhileUnique(working, 1, solverCtx, deadline, random);
+      if (minimized.aborted) break;
+      working = minimized.working;
+      if (working.length > targetMax) continue;
+      if (working.length < targetMin) {
+        const grown = growWhileUnique(working, targetMin, pool, solverCtx, deadline);
+        if (grown.aborted) break;
+        working = grown.working;
       }
+    } else if (working.length < targetMax) {
+      const grown = growWhileUnique(working, targetMax, pool, solverCtx, deadline);
+      if (grown.aborted) break;
+      working = grown.working;
     }
 
-    const finalResult = uniqueBeforeDeadline(working, deadline);
+    const finalResult = uniqueBeforeDeadline(working, solverCtx, deadline);
     if (finalResult === SOLVER_ABORTED) break;
-    if (finalResult !== 1 || !answerSatisfiesClues(answer, working)) continue;
-    const inTarget =
-      working.length >= target.min && working.length <= target.max;
-    if (preferMax && !inTarget) continue;
-    if (!preferMax && working.length >= 15) continue;
+    if (finalResult !== 1 || !answerSatisfiesClues(ctx.answer, working, solverCtx)) continue;
 
-    return {
-      answer,
-      clues: working,
-      meta: { usedFallback: false, clueCount: working.length },
-    };
+    const inTarget = working.length >= targetMin && working.length <= targetMax;
+    if (!inTarget) continue;
+
+    return finalizePuzzle(ctx, working, profile.id, {
+      usedFallback: false,
+      clueCount: working.length,
+    });
   }
 
-  return verifiedFallback();
+  return verifiedFallback(profile.id);
 }

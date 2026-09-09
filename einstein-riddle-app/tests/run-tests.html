@@ -18,6 +18,7 @@
       SOLVER_ABORTED, answerSatisfiesClues, countSolutions, isUniqueSolution,
     } from "../js/solver.js";
     import { generatePuzzle } from "../js/generate.js";
+    import { buildHints } from "../js/hints.js";
     import { bindTeacherPanel } from "../js/teacher.js";
     import { createDragDrop } from "../js/drag-drop.js";
 
@@ -106,35 +107,78 @@
     g.undo();
     assert(g.getPlacement().nation[0] == null, "undone");
 
+    function puzzleSolverOptions(puzzle) {
+      return {
+        houseCount: puzzle.houseCount,
+        categories: puzzle.categories,
+        values: puzzle.values,
+      };
+    }
+
+    for (const id of ["easy", "normal", "hard", "expert"]) {
+      const puzzle = generatePuzzle(id, { timeLimitMs: 2500 });
+      const profile = DIFFICULTY_PROFILES[id];
+      assert(puzzle.houseCount === profile.houseCount, `${id} generated house count`);
+      assert(
+        JSON.stringify(puzzle.categories) === JSON.stringify(profile.categories),
+        `${id} categories`,
+      );
+      assert(isUniqueSolution(puzzle.clues, puzzleSolverOptions(puzzle)), `${id} unique`);
+      assert(
+        answerSatisfiesClues(puzzle.answer, puzzle.clues, puzzleSolverOptions(puzzle)),
+        `${id} answer satisfies clues`,
+      );
+      assert(Array.isArray(puzzle.hints) && puzzle.hints.length >= 3, `${id} has staged hints`);
+      assert(puzzle.difficulty === id, `${id} difficulty field`);
+    }
+
+    const easyGenerated = generatePuzzle("easy", { timeLimitMs: 2500 });
+    assert(!easyGenerated.categories.includes("animal"), "easy excludes animal");
+    assert(!("animal" in easyGenerated.answer), "easy answer excludes animal");
+    assert(Object.values(easyGenerated.values).every((row) => row.length === 4), "easy selects four values");
+    assert(easyGenerated.hints[0].stage === "direction", "first hint direction");
+    assert(easyGenerated.hints[1].stage === "clues", "second hint clue guidance");
+    assert(easyGenerated.hints[2].stage === "fact", "third hint fact");
+
+    const hardGenerated = generatePuzzle("hard", { timeLimitMs: 2500 });
+    const expertGenerated = generatePuzzle("expert", { timeLimitMs: 2500 });
+    assert(hardGenerated.meta.usedFallback || hardGenerated.clues.length === 15, "non-fallback hard has 15 clues");
+    assert(
+      expertGenerated.meta.usedFallback ||
+        (expertGenerated.clues.length >= 12 && expertGenerated.clues.length <= 14),
+      "non-fallback expert has 12-14 clues",
+    );
+    if (!hardGenerated.meta.usedFallback && !expertGenerated.meta.usedFallback) {
+      assert(expertGenerated.clues.length < hardGenerated.clues.length, "expert fewer clues than hard");
+    }
+
     const generated = { easy: [], hard: [] };
     for (const difficulty of ["easy", "hard"]) {
       for (let i = 0; i < 3; i++) {
         const started = Date.now();
-        const puzzle = generatePuzzle(difficulty);
+        const puzzle = generatePuzzle(difficulty, { timeLimitMs: 2500 });
         const elapsed = Date.now() - started;
         if (!puzzle.meta.usedFallback) generated[difficulty].push(puzzle.meta.clueCount);
-        assert(isUniqueSolution(puzzle.clues), `${difficulty} puzzle ${i + 1} unique including fallback`);
+        assert(isUniqueSolution(puzzle.clues, puzzleSolverOptions(puzzle)), `${difficulty} puzzle ${i + 1} unique including fallback`);
         assert(
-          answerSatisfiesClues(puzzle.answer, puzzle.clues),
+          answerSatisfiesClues(puzzle.answer, puzzle.clues, puzzleSolverOptions(puzzle)),
           `${difficulty} puzzle ${i + 1} answer satisfies clues`,
         );
-        if (difficulty === "easy") {
-          assert(puzzle.meta.usedFallback || puzzle.clues.length === 15, "non-fallback easy has 15 clues");
-        } else {
-          assert(puzzle.meta.usedFallback || puzzle.clues.length <= 14, "non-fallback hard has at most 14 clues");
-        }
         assert(elapsed < 2100, `${difficulty} puzzle ${i + 1} generated near 2s boundary`);
       }
     }
     if (generated.easy.length && generated.hard.length) {
-      assert(Math.max(...generated.hard) < Math.min(...generated.easy), "non-fallback hard strictly below easy");
+      assert(Math.max(...generated.hard) > Math.min(...generated.easy), "non-fallback hard above easy clue count");
     }
 
     const timeoutStarted = Date.now();
     const timedOut = generatePuzzle("hard", { timeLimitMs: 0 });
     assert(timedOut.meta.usedFallback, "expired generator budget uses fallback");
     assert(Date.now() - timeoutStarted < 500, "expired generator budget returns promptly");
-    assert(isUniqueSolution(timedOut.clues), "fallback path remains unique");
+    assert(isUniqueSolution(timedOut.clues, puzzleSolverOptions(timedOut)), "fallback path remains unique");
+    assert(timedOut.houseCount === 5, "hard fallback keeps profile house count");
+
+    assert(typeof buildHints === "function", "buildHints export exists");
 
     (function testTeacherPlacementRefresh() {
       const ids = [

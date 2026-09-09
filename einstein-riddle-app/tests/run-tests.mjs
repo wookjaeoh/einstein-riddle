@@ -8,6 +8,7 @@ import {
 } from "../js/puzzle-data.js";
 import * as solver from "../js/solver.js";
 import { generatePuzzle } from "../js/generate.js";
+import { buildHints } from "../js/hints.js";
 import { bindTeacherPanel } from "../js/teacher.js";
 import { createDragDrop } from "../js/drag-drop.js";
 
@@ -319,27 +320,74 @@ assert(
   "answer validation fails closed for unknown clue",
 );
 
+function puzzleSolverOptions(puzzle) {
+  return {
+    houseCount: puzzle.houseCount,
+    categories: puzzle.categories,
+    values: puzzle.values,
+  };
+}
+
+for (const id of ["easy", "normal", "hard", "expert"]) {
+  const puzzle = generatePuzzle(id, { timeLimitMs: 2500, random: seededRandom(11 + id.length) });
+  const profile = DIFFICULTY_PROFILES[id];
+  assert(puzzle.houseCount === profile.houseCount, `${id} generated house count`);
+  assert(
+    JSON.stringify(puzzle.categories) === JSON.stringify(profile.categories),
+    `${id} categories`,
+  );
+  assert(
+    solver.isUniqueSolution(puzzle.clues, puzzleSolverOptions(puzzle)),
+    `${id} unique`,
+  );
+  assert(
+    solver.answerSatisfiesClues(puzzle.answer, puzzle.clues, puzzleSolverOptions(puzzle)),
+    `${id} answer satisfies clues`,
+  );
+  assert(Array.isArray(puzzle.hints) && puzzle.hints.length >= 3, `${id} has staged hints`);
+  assert(puzzle.difficulty === id, `${id} difficulty field`);
+}
+
+const easy = generatePuzzle("easy", { timeLimitMs: 2500, random: seededRandom(7) });
+assert(!easy.categories.includes("animal"), "easy excludes animal");
+assert(!("animal" in easy.answer), "easy answer excludes animal");
+assert(Object.values(easy.values).every((row) => row.length === 4), "easy selects four values");
+assert(easy.hints[0].stage === "direction", "first hint direction");
+assert(easy.hints[1].stage === "clues", "second hint clue guidance");
+assert(easy.hints[2].stage === "fact", "third hint fact");
+assert(
+  easy.hints[1].text.includes("번") && !easy.hints[1].text.includes("2번과 5번"),
+  "hint clue numbers come from generated puzzle",
+);
+
+const hard = generatePuzzle("hard", { timeLimitMs: 2500, random: seededRandom(9) });
+const expert = generatePuzzle("expert", { timeLimitMs: 2500, random: seededRandom(13) });
+assert(hard.meta.usedFallback || hard.clues.length === 15, "non-fallback hard has 15 clues");
+assert(
+  expert.meta.usedFallback ||
+    (expert.clues.length >= 12 && expert.clues.length <= 14),
+  "non-fallback expert has 12-14 clues",
+);
+if (!hard.meta.usedFallback && !expert.meta.usedFallback) {
+  assert(expert.clues.length < hard.clues.length, "non-fallback expert has fewer clues than hard");
+}
+
 const timeoutStarted = Date.now();
 const timedOutPuzzle = generatePuzzle("hard", { timeLimitMs: 0, random: seededRandom(1) });
 assert(timedOutPuzzle.meta.usedFallback, "expired generation budget uses fallback");
 assert(Date.now() - timeoutStarted < 500, "expired generation budget returns promptly");
-assert(solver.isUniqueSolution(timedOutPuzzle.clues), "fallback result is verified unique");
+assert(
+  solver.isUniqueSolution(timedOutPuzzle.clues, puzzleSolverOptions(timedOutPuzzle)),
+  "fallback result is verified unique",
+);
+assert(timedOutPuzzle.houseCount === 5, "hard fallback keeps profile house count");
 
-const easy = generatePuzzle("easy", { random: seededRandom(7) });
-const hard = generatePuzzle("hard", { random: seededRandom(7) });
-for (const [difficulty, puzzle] of [["easy", easy], ["hard", hard]]) {
-  assert(solver.isUniqueSolution(puzzle.clues), `${difficulty} result is unique including fallback`);
-  assert(
-    typeof solver.answerSatisfiesClues === "function" &&
-      solver.answerSatisfiesClues(puzzle.answer, puzzle.clues),
-    `${difficulty} answer satisfies all returned clues`,
-  );
-}
-assert(easy.meta.usedFallback || easy.clues.length === 15, "non-fallback easy has 15 clues");
-assert(hard.meta.usedFallback || hard.clues.length <= 14, "non-fallback hard has at most 14 clues");
-if (!easy.meta.usedFallback && !hard.meta.usedFallback) {
-  assert(hard.clues.length < easy.clues.length, "non-fallback hard has strictly fewer clues than easy");
-}
+const easyTimeout = generatePuzzle("easy", { timeLimitMs: 0, random: seededRandom(2) });
+assert(easyTimeout.meta.usedFallback, "easy expired budget uses fallback");
+assert(easyTimeout.houseCount === 4, "easy fallback keeps profile house count");
+assert(!easyTimeout.categories.includes("animal"), "easy fallback excludes animal");
+
+assert(typeof buildHints === "function", "buildHints export exists");
 
 testTeacherRefresh();
 testTeacherRefreshOnPlacementChange();
