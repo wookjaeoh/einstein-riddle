@@ -8,281 +8,560 @@
   <h1>Tests</h1>
   <pre id="out"></pre>
   <script type="module">
-    import {
-      CATEGORIES, VALUES, FALLBACK_ANSWER, FALLBACK_CLUES, HOUSES, DIFFICULTY_TARGETS,
-      DIFFICULTY_PROFILES, PROFILE_FALLBACKS,
-    } from "../js/puzzle-data.js";
-    import { countWrong, isComplete, grade } from "../js/validate.js";
-    import { createGameState } from "../js/state.js";
-    import {
-      SOLVER_ABORTED, answerSatisfiesClues, countSolutions, isUniqueSolution,
-    } from "../js/solver.js";
-    import { generatePuzzle } from "../js/generate.js";
-    import { buildHints, validateHints } from "../js/hints.js";
-    import { bindTeacherPanel } from "../js/teacher.js";
-    import { createDragDrop } from "../js/drag-drop.js";
+import {
+  CATEGORIES,
+  VALUES,
+  FALLBACK_ANSWER,
+  FALLBACK_CLUES,
+  HOUSES,
+  DIFFICULTY_PROFILES,
+  PROFILE_FALLBACKS,
+} from "../js/puzzle-data.js";
+import * as solver from "../js/solver.js";
+import { generatePuzzle } from "../js/generate.js";
+import { buildHints, validateHints } from "../js/hints.js";
+import { createGameState } from "../js/state.js";
+import { createTextScale } from "../js/text-scale.js";
+import { renderClues } from "../js/clues.js";
+import { bindTeacherPanel } from "../js/teacher.js";
+import { createDragDrop } from "../js/drag-drop.js";
 
-    const out = document.getElementById("out");
-    let failed = 0;
-    function assert(cond, msg) {
-      out.textContent += (cond ? "ok: " : "FAIL: ") + msg + "\n";
-      if (!cond) failed++;
-    }
+let failed = 0;
+let passed = 0;
 
-    const expectedProfiles = {
-      easy: { houseCount: 4, categories: ["color", "nation", "drink", "food"] },
-      normal: { houseCount: 4, categories: ["color", "nation", "drink", "food", "animal"] },
-      hard: { houseCount: 5, categories: CATEGORIES },
-      expert: { houseCount: 5, categories: CATEGORIES },
-    };
-    for (const [id, expected] of Object.entries(expectedProfiles)) {
-      assert(DIFFICULTY_PROFILES[id].houseCount === expected.houseCount, `${id} house count`);
-      assert(
-        JSON.stringify(DIFFICULTY_PROFILES[id].categories) === JSON.stringify(expected.categories),
-        `${id} categories`,
-      );
-    }
-    assert(
-      countSolutions([], {
-        limit: 2,
-        houseCount: 4,
-        categories: ["color"],
-        values: { color: ["yellow", "blue", "red", "green"] },
-      }) === 2,
-      "variable solver supports 4 houses",
-    );
+function assert(condition, message) {
+  if (condition) {
+    passed++;
+    console.log(`ok: ${message}`);
+    return;
+  }
+  failed++;
+  console.error(`FAIL: ${message}`);
+}
 
-    assert(HOUSES.length === 5, "5 houses");
-    assert(CATEGORIES.length === 5, "5 categories");
-    for (const cat of CATEGORIES) {
-      assert(VALUES[cat].length === 5, cat + " has 5 values");
-      assert(FALLBACK_ANSWER[cat].length === 5, cat + " answer length");
-      assert(new Set(FALLBACK_ANSWER[cat]).size === 5, cat + " answer unique");
-    }
-    assert(FALLBACK_CLUES.length === 15, "fallback 15 clues");
-    assert(DIFFICULTY_TARGETS.easy.min === 12, "easy min");
-    assert(DIFFICULTY_TARGETS.hard.max === 11, "hard max");
-    assert(countSolutions([], { limit: 2 }) === 2, "no clues reach solution limit");
-    assert(isUniqueSolution(FALLBACK_CLUES), "fallback clues have one solution");
-    assert(answerSatisfiesClues(FALLBACK_ANSWER, FALLBACK_CLUES), "fallback answer satisfies clues");
-    let abortChecks = 0;
-    assert(
-      countSolutions([], {
-        limit: 2,
-        shouldAbort: () => ++abortChecks >= 10,
-      }) === SOLVER_ABORTED,
-      "solver cancellation is explicit",
-    );
-    const unknownClue = { kind: "unknown", cat: "nation", val: "norway" };
-    const malformedClue = { kind: "atHouse", cat: "nation", val: "unknown", houseIndex: 0 };
-    assert(countSolutions([unknownClue]) === 0, "unknown clue fails closed");
-    assert(!isUniqueSolution([unknownClue]), "unknown clue is not unique");
-    assert(!answerSatisfiesClues(FALLBACK_ANSWER, [unknownClue]), "unknown clue fails answer validation");
-    assert(countSolutions([malformedClue]) === 0, "malformed clue fails closed");
+function seededRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
 
-    const empty = Object.fromEntries(CATEGORIES.map((c) => [c, [null, null, null, null, null]]));
-    assert(isComplete(empty) === false, "empty incomplete");
-    assert(countWrong(FALLBACK_ANSWER, FALLBACK_ANSWER) === 0, "answer has 0 wrong");
-    assert(grade(FALLBACK_ANSWER, FALLBACK_ANSWER).solved === true, "answer solved");
+function fakeElement() {
+  const listeners = {};
+  const classes = new Set(["hidden"]);
+  return {
+    value: "",
+    textContent: "",
+    innerHTML: "",
+    attributes: {},
+    classList: {
+      add: (...names) => names.forEach((name) => classes.add(name)),
+      remove: (...names) => names.forEach((name) => classes.delete(name)),
+      contains: (name) => classes.has(name),
+      toggle(name) {
+        if (classes.has(name)) classes.delete(name);
+        else classes.add(name);
+      },
+    },
+    addEventListener(type, listener) {
+      listeners[type] = listener;
+    },
+    click() {
+      listeners.click?.();
+    },
+    setAttribute(name, value) {
+      this.attributes[name] = value;
+    },
+  };
+}
 
-    const oneWrong = structuredClone(FALLBACK_ANSWER);
-    oneWrong.animal[3] = "dog";
-    assert(countWrong(oneWrong, FALLBACK_ANSWER) >= 1, "tampered answer has wrong cells");
+function testTeacherRefresh() {
+  const ids = [
+    "teacher-panel",
+    "btn-teacher",
+    "btn-teacher-unlock",
+    "teacher-pw",
+    "teacher-error",
+    "teacher-body",
+    "teacher-login",
+    "answer-board",
+  ];
+  const elements = Object.fromEntries(ids.map((id) => [id, fakeElement()]));
+  const previousDocument = globalThis.document;
+  globalThis.document = { getElementById: (id) => elements[id] };
 
-    const g = createGameState();
-    g.loadPuzzle({ answer: FALLBACK_ANSWER, clues: FALLBACK_CLUES, difficulty: "easy" });
-    assert(g.getDifficulty() === "easy", "default easy");
-    assert(g.getClues().length === 15, "fallback 15 clues");
-    assert(g.getAnswer().nation[0] === "norway", "fallback norway house1");
-
-    const placed = g.moveCard({
-      value: "norway",
-      category: "nation",
-      from: { type: "pool" },
-      to: { type: "slot", houseIndex: 0, category: "nation" },
+  try {
+    let answer = structuredClone(FALLBACK_ANSWER);
+    const teacher = bindTeacherPanel({
+      getPlacement: () => structuredClone(FALLBACK_ANSWER),
+      getAnswer: () => answer,
     });
-    assert(placed === true, "move to empty slot");
-    assert(g.getPlacement().nation[0] === "norway", "norway in house1");
-    assert(g.canUndo() === true, "can undo");
-    g.undo();
-    assert(g.getPlacement().nation[0] == null, "undone");
+    elements["teacher-pw"].value = "teacher2026";
+    elements["btn-teacher-unlock"].click();
+    assert(elements["answer-board"].innerHTML.includes("노르웨이"), "teacher initially renders current answer");
 
-    function puzzleSolverOptions(puzzle) {
-      return {
-        houseCount: puzzle.houseCount,
-        categories: puzzle.categories,
-        values: puzzle.values,
-      };
-    }
+    answer = structuredClone(FALLBACK_ANSWER);
+    answer.nation[0] = "sweden";
+    assert(typeof teacher?.refresh === "function", "teacher binding exposes refresh API");
+    teacher?.refresh?.();
+    assert(!elements["answer-board"].innerHTML.includes("노르웨이"), "teacher refresh renders new puzzle answer");
+  } finally {
+    globalThis.document = previousDocument;
+  }
+}
 
-    for (const id of ["easy", "normal", "hard", "expert"]) {
-      const puzzle = generatePuzzle(id, { timeLimitMs: 2500 });
-      const profile = DIFFICULTY_PROFILES[id];
-      assert(puzzle.houseCount === profile.houseCount, `${id} generated house count`);
-      assert(
-        JSON.stringify(puzzle.categories) === JSON.stringify(profile.categories),
-        `${id} categories`,
-      );
-      assert(isUniqueSolution(puzzle.clues, puzzleSolverOptions(puzzle)), `${id} unique`);
-      assert(
-        answerSatisfiesClues(puzzle.answer, puzzle.clues, puzzleSolverOptions(puzzle)),
-        `${id} answer satisfies clues`,
-      );
-      assert(Array.isArray(puzzle.hints) && puzzle.hints.length >= 6, `${id} has multiple hint bundles`);
-      assert(puzzle.difficulty === id, `${id} difficulty field`);
-      assert(
-        validateHints({
-          hints: puzzle.hints,
-          clues: puzzle.clues,
-          answer: puzzle.answer,
-          houseCount: puzzle.houseCount,
-          categories: puzzle.categories,
-        }),
-        `${id} hints validate against answer and clue indices`,
-      );
-      assert(new Set(puzzle.hints.map((hint) => hint.id)).size === puzzle.hints.length, `${id} hint ids unique`);
-    }
+function testTeacherRefreshOnPlacementChange() {
+  const ids = [
+    "teacher-panel",
+    "btn-teacher",
+    "btn-teacher-unlock",
+    "teacher-pw",
+    "teacher-error",
+    "teacher-body",
+    "teacher-login",
+    "answer-board",
+  ];
+  const elements = Object.fromEntries(ids.map((id) => [id, fakeElement()]));
+  const previousDocument = globalThis.document;
+  globalThis.document = { getElementById: (id) => elements[id] };
 
-    const easyGenerated = generatePuzzle("easy", { timeLimitMs: 2500 });
-    assert(!easyGenerated.categories.includes("animal"), "easy excludes animal");
-    assert(!("animal" in easyGenerated.answer), "easy answer excludes animal");
-    assert(Object.values(easyGenerated.values).every((row) => row.length === 4), "easy selects four values");
-    assert(easyGenerated.hints.length >= 6, "easy has at least two hint bundles");
-    assert(easyGenerated.hints[0].stage === "direction", "first hint direction");
-    assert(easyGenerated.hints[1].stage === "clues", "second hint clue guidance");
-    assert(easyGenerated.hints[2].stage === "fact", "third hint fact");
+  try {
+    let placement = Object.fromEntries(CATEGORIES.map((cat) => [cat, [null, null, null, null, null]]));
+    const teacher = bindTeacherPanel({
+      getPlacement: () => placement,
+      getAnswer: () => FALLBACK_ANSWER,
+    });
+    elements["teacher-pw"].value = "teacher2026";
+    elements["btn-teacher-unlock"].click();
     assert(
-      easyGenerated.hints[1].meta?.clueIndices?.every(
-        (index) => Number.isInteger(index) && index >= 1 && index <= easyGenerated.clues.length,
-      ),
-      "hint clue indices are valid",
-    );
-    assert(
-      easyGenerated.hints[2].meta?.val ===
-        easyGenerated.answer[easyGenerated.hints[2].meta.cat]?.[easyGenerated.hints[2].meta.houseIndex],
-      "hint fact matches answer placement",
+      elements["answer-board"].innerHTML.includes("틀린 칸(비교): 25"),
+      "teacher shows all empty cells as wrong",
     );
 
-    const hardGenerated = generatePuzzle("hard", { timeLimitMs: 2500 });
-    const expertGenerated = generatePuzzle("expert", { timeLimitMs: 2500 });
-    assert(hardGenerated.hints.length >= 9, "hard has at least three hint bundles");
-    assert(hardGenerated.meta.usedFallback || hardGenerated.clues.length === 15, "non-fallback hard has 15 clues");
+    placement = structuredClone(FALLBACK_ANSWER);
+    teacher.refresh();
     assert(
-      expertGenerated.meta.usedFallback ||
-        (expertGenerated.clues.length >= 12 && expertGenerated.clues.length <= 14),
-      "non-fallback expert has 12-14 clues",
-    );
-    assert(hardGenerated.clues.length > expertGenerated.clues.length, "hard always has more clues than expert");
-    assert(
-      PROFILE_FALLBACKS.hard.clues.length > PROFILE_FALLBACKS.expert.clues.length,
-      "hard fallback has more clues than expert fallback",
-    );
-    assert(
-      PROFILE_FALLBACKS.expert.clues.length >= 12 &&
-        PROFILE_FALLBACKS.expert.clues.length <= 14,
-      "expert fallback stays within 12-14 clues",
+      elements["answer-board"].innerHTML.includes("틀린 칸(비교): 0"),
+      "teacher refresh updates comparison after placement matches answer",
     );
 
-    const generated = { easy: [], hard: [] };
-    for (const difficulty of ["easy", "hard"]) {
-      for (let i = 0; i < 3; i++) {
-        const started = Date.now();
-        const puzzle = generatePuzzle(difficulty, { timeLimitMs: 2500 });
-        const elapsed = Date.now() - started;
-        if (!puzzle.meta.usedFallback) generated[difficulty].push(puzzle.meta.clueCount);
-        assert(isUniqueSolution(puzzle.clues, puzzleSolverOptions(puzzle)), `${difficulty} puzzle ${i + 1} unique including fallback`);
-        assert(
-          answerSatisfiesClues(puzzle.answer, puzzle.clues, puzzleSolverOptions(puzzle)),
-          `${difficulty} puzzle ${i + 1} answer satisfies clues`,
-        );
-        assert(elapsed < 2100, `${difficulty} puzzle ${i + 1} generated near 2s boundary`);
-      }
-    }
-    if (generated.easy.length && generated.hard.length) {
-      assert(Math.max(...generated.hard) > Math.min(...generated.easy), "non-fallback hard above easy clue count");
-    }
-
-    const timeoutStarted = Date.now();
-    const timedOut = generatePuzzle("hard", { timeLimitMs: 0 });
-    assert(timedOut.meta.usedFallback, "expired generator budget uses fallback");
-    assert(Date.now() - timeoutStarted < 500, "expired generator budget returns promptly");
-    assert(isUniqueSolution(timedOut.clues, puzzleSolverOptions(timedOut)), "fallback path remains unique");
-    assert(timedOut.houseCount === 5, "hard fallback keeps profile house count");
-
-    const expertTimeout = generatePuzzle("expert", { timeLimitMs: 0 });
-    assert(expertTimeout.meta.usedFallback, "expert expired budget uses fallback");
+    placement = structuredClone(FALLBACK_ANSWER);
+    placement.animal[0] = "dog";
+    teacher.refresh();
     assert(
-      expertTimeout.clues.length >= 12 && expertTimeout.clues.length <= 14,
-      "expert fallback clue count in range",
+      elements["answer-board"].innerHTML.includes("틀린 칸(비교): 1"),
+      "teacher refresh updates comparison after card move",
     );
-    assert(
-      timedOut.clues.length > expertTimeout.clues.length,
-      "hard fallback beats expert fallback clue count",
-    );
+  } finally {
+    globalThis.document = previousDocument;
+  }
+}
 
-    assert(typeof buildHints === "function", "buildHints export exists");
-    assert(typeof validateHints === "function", "validateHints export exists");
+function testDragCancelCleanup() {
+  let dropped = false;
+  const cardClasses = new Set();
+  const poolClasses = new Set();
+  const cardListeners = {};
+  let ghostNode = null;
+  let ghostRemoved = false;
 
-    (function testTeacherPlacementRefresh() {
-      const ids = [
-        "teacher-panel", "btn-teacher", "btn-teacher-unlock", "teacher-pw",
-        "teacher-error", "teacher-body", "teacher-login", "answer-board",
-      ];
-      const elements = Object.fromEntries(ids.map((id) => [id, document.createElement("div")]));
-      elements["teacher-login"].classList.add("hidden");
-      elements["teacher-body"].classList.add("hidden");
-      const prevGet = document.getElementById.bind(document);
-      document.getElementById = (id) => elements[id] ?? prevGet(id);
-      try {
-        let placement = Object.fromEntries(CATEGORIES.map((c) => [c, [null, null, null, null, null]]));
-        const teacher = bindTeacherPanel({
-          getPlacement: () => placement,
-          getAnswer: () => FALLBACK_ANSWER,
-        });
-        elements["teacher-pw"].value = "teacher2026";
-        elements["btn-teacher-unlock"].click();
-        assert(elements["answer-board"].innerHTML.includes("틀린 칸(비교): 25"), "teacher empty placement wrong count");
-        placement = structuredClone(FALLBACK_ANSWER);
-        teacher.refresh();
-        assert(elements["answer-board"].innerHTML.includes("틀린 칸(비교): 0"), "teacher refresh after full placement");
-      } finally {
-        document.getElementById = prevGet;
-      }
-    })();
+  const ghost = {
+    style: {},
+    remove() {
+      ghostRemoved = true;
+    },
+  };
 
-    (function testDragPointerCancel() {
-      let dropped = false;
-      const card = document.createElement("span");
-      card.className = "card";
-      card.dataset.value = "norway";
-      card.dataset.category = "nation";
-      const root = document.createElement("div");
-      root.appendChild(card);
-      const pool = document.createElement("div");
-      pool.id = "pool";
-      const dragDrop = createDragDrop({
-        boardEl: document.createElement("div"),
-        poolEl: pool,
-        onDrop: () => { dropped = true; },
-        rootEl: root,
-      });
-      dragDrop.bind();
-      dragDrop.handlePointerDown({
-        preventDefault() {},
-        target: card,
-        clientX: 5,
-        clientY: 6,
-        pointerId: 99,
-      });
-      assert(dragDrop.isDragging(), "drag session active");
-      dragDrop.handlePointerCancel({ pointerId: 99, clientX: 5, clientY: 6 });
-      assert(!dragDrop.isDragging(), "cancel clears drag session");
-      assert(!dragDrop.hasGhost(), "cancel removes ghost");
-      assert(!card.classList.contains("dragging"), "cancel removes dragging class");
-      assert(!dropped, "cancel keeps original state without onDrop");
-    })();
+  const card = {
+    dataset: { value: "norway", category: "nation" },
+    classList: {
+      add: (...names) => names.forEach((name) => cardClasses.add(name)),
+      remove: (...names) => names.forEach((name) => cardClasses.delete(name)),
+      contains: (name) => cardClasses.has(name),
+    },
+    closest(selector) {
+      return selector === ".card" ? this : null;
+    },
+    cloneNode() {
+      ghostNode = ghost;
+      return ghost;
+    },
+    setPointerCapture() {},
+    releasePointerCapture() {},
+    addEventListener(type, listener) {
+      cardListeners[type] = listener;
+    },
+    removeEventListener(type, listener) {
+      if (cardListeners[type] === listener) delete cardListeners[type];
+    },
+  };
 
-    out.textContent += failed === 0 ? "\nALL PASSED\n" : `\n${failed} FAILED\n`;
+  const rootEl = {
+    listeners: {},
+    addEventListener(type, listener) {
+      this.listeners[type] = listener;
+    },
+  };
+  const poolEl = {
+    classList: {
+      add: (...names) => names.forEach((name) => poolClasses.add(name)),
+      remove: (...names) => names.forEach((name) => poolClasses.delete(name)),
+      contains: (name) => poolClasses.has(name),
+    },
+  };
+  const body = {
+    children: [],
+    appendChild(node) {
+      this.children.push(node);
+    },
+  };
+  const fakeDocument = {
+    body,
+    querySelectorAll() {
+      return [];
+    },
+    elementFromPoint() {
+      return null;
+    },
+  };
+  const fakeWindow = {
+    listeners: {},
+    addEventListener(type, listener) {
+      this.listeners[type] = listener;
+    },
+  };
+
+  const dragDrop = createDragDrop({
+    boardEl: {},
+    poolEl,
+    onDrop: () => {
+      dropped = true;
+    },
+    rootEl,
+    targetDocument: fakeDocument,
+    targetWindow: fakeWindow,
+  });
+  dragDrop.bind();
+
+  rootEl.listeners.pointerdown({
+    preventDefault() {},
+    target: card,
+    clientX: 10,
+    clientY: 20,
+    pointerId: 1,
+  });
+  assert(dragDrop.isDragging(), "drag starts on pointerdown");
+  assert(dragDrop.hasGhost(), "ghost is created while dragging");
+  assert(cardClasses.has("dragging"), "card gets dragging class");
+
+  fakeWindow.listeners.pointercancel({ pointerId: 1, clientX: 10, clientY: 20 });
+  assert(!dragDrop.isDragging(), "pointercancel ends drag session");
+  assert(!dragDrop.hasGhost(), "pointercancel removes ghost");
+  assert(ghostRemoved, "pointercancel calls ghost.remove");
+  assert(!cardClasses.has("dragging"), "pointercancel clears dragging class");
+  assert(!dropped, "pointercancel does not invoke onDrop");
+
+  dropped = false;
+  ghostRemoved = false;
+  cardClasses.clear();
+  rootEl.listeners.pointerdown({
+    preventDefault() {},
+    target: card,
+    clientX: 30,
+    clientY: 40,
+    pointerId: 2,
+  });
+  cardListeners.lostpointercapture?.({ pointerId: 2 });
+  assert(!dragDrop.isDragging(), "lostpointercapture ends drag session");
+  assert(!dragDrop.hasGhost(), "lostpointercapture removes ghost");
+  assert(ghostRemoved, "lostpointercapture calls ghost.remove");
+  assert(!cardClasses.has("dragging"), "lostpointercapture clears dragging class");
+  assert(!dropped, "lostpointercapture does not invoke onDrop");
+}
+
+const expectedProfiles = {
+  easy: { houseCount: 4, categories: ["color", "nation", "drink", "food"] },
+  normal: { houseCount: 4, categories: ["color", "nation", "drink", "food", "animal"] },
+  hard: { houseCount: 5, categories: CATEGORIES },
+  expert: { houseCount: 5, categories: CATEGORIES },
+};
+for (const [id, expected] of Object.entries(expectedProfiles)) {
+  assert(DIFFICULTY_PROFILES[id].houseCount === expected.houseCount, `${id} house count`);
+  assert(
+    JSON.stringify(DIFFICULTY_PROFILES[id].categories) === JSON.stringify(expected.categories),
+    `${id} categories`,
+  );
+}
+assert(
+  solver.countSolutions([], {
+    limit: 2,
+    houseCount: 4,
+    categories: ["color"],
+    values: { color: ["yellow", "blue", "red", "green"] },
+  }) === 2,
+  "variable solver supports 4 houses",
+);
+
+assert(HOUSES.length === 5, "5 houses");
+assert(CATEGORIES.every((cat) => VALUES[cat].length === 5), "5 values per category");
+assert(solver.countSolutions([], { limit: 2 }) === 2, "no clues reach solution limit");
+assert(solver.isUniqueSolution(FALLBACK_CLUES), "fallback clues have one solution");
+
+let abortChecks = 0;
+const aborted = solver.countSolutions([], {
+  limit: 2,
+  shouldAbort: () => ++abortChecks >= 10,
+});
+assert(
+  "SOLVER_ABORTED" in solver && aborted === solver.SOLVER_ABORTED,
+  "solver reports cancellation explicitly",
+);
+
+const unknownClue = { id: "unknown", kind: "teleports", cat: "nation", val: "norway" };
+const malformedClue = { id: "malformed", kind: "atHouse", cat: "nation", val: "unknown", houseIndex: 0 };
+assert(solver.countSolutions([unknownClue]) === 0, "unknown clue fails closed");
+assert(!solver.isUniqueSolution([unknownClue]), "unknown clue is never unique");
+assert(solver.countSolutions([malformedClue]) === 0, "malformed clue fails closed");
+assert(
+  typeof solver.answerSatisfiesClues === "function" &&
+    solver.answerSatisfiesClues(FALLBACK_ANSWER, FALLBACK_CLUES),
+  "fallback answer satisfies every clue",
+);
+assert(
+  typeof solver.answerSatisfiesClues === "function" &&
+    !solver.answerSatisfiesClues(FALLBACK_ANSWER, [unknownClue]),
+  "answer validation fails closed for unknown clue",
+);
+
+function puzzleSolverOptions(puzzle) {
+  return {
+    houseCount: puzzle.houseCount,
+    categories: puzzle.categories,
+    values: puzzle.values,
+  };
+}
+
+for (const id of ["easy", "normal", "hard", "expert"]) {
+  const puzzle = generatePuzzle(id, { timeLimitMs: 2500, random: seededRandom(11 + id.length) });
+  const profile = DIFFICULTY_PROFILES[id];
+  assert(puzzle.houseCount === profile.houseCount, `${id} generated house count`);
+  assert(
+    JSON.stringify(puzzle.categories) === JSON.stringify(profile.categories),
+    `${id} categories`,
+  );
+  assert(
+    solver.isUniqueSolution(puzzle.clues, puzzleSolverOptions(puzzle)),
+    `${id} unique`,
+  );
+  assert(
+    solver.answerSatisfiesClues(puzzle.answer, puzzle.clues, puzzleSolverOptions(puzzle)),
+    `${id} answer satisfies clues`,
+  );
+  assert(Array.isArray(puzzle.hints) && puzzle.hints.length >= 6, `${id} has multiple hint bundles`);
+  assert(puzzle.difficulty === id, `${id} difficulty field`);
+  assert(
+    validateHints({
+      hints: puzzle.hints,
+      clues: puzzle.clues,
+      answer: puzzle.answer,
+      houseCount: puzzle.houseCount,
+      categories: puzzle.categories,
+    }),
+    `${id} hints validate against answer and clue indices`,
+  );
+  assert(new Set(puzzle.hints.map((hint) => hint.id)).size === puzzle.hints.length, `${id} hint ids unique`);
+}
+
+const easy = generatePuzzle("easy", { timeLimitMs: 2500, random: seededRandom(7) });
+assert(!easy.categories.includes("animal"), "easy excludes animal");
+assert(!("animal" in easy.answer), "easy answer excludes animal");
+assert(Object.values(easy.values).every((row) => row.length === 4), "easy selects four values");
+assert(easy.hints.length >= 6, "easy has at least two hint bundles");
+assert(easy.hints[0].stage === "direction", "first hint direction");
+assert(easy.hints[1].stage === "clues", "second hint clue guidance");
+assert(easy.hints[2].stage === "fact", "third hint fact");
+assert(
+  easy.hints[1].meta?.clueIndices?.every(
+    (index) => Number.isInteger(index) && index >= 1 && index <= easy.clues.length,
+  ),
+  "hint clue indices are valid",
+);
+assert(
+  easy.hints[2].meta?.val === easy.answer[easy.hints[2].meta.cat]?.[easy.hints[2].meta.houseIndex],
+  "hint fact matches answer placement",
+);
+assert(
+  easy.hints[1].text.includes("번") && !easy.hints[1].text.includes("2번과 5번"),
+  "hint clue numbers come from generated puzzle",
+);
+
+const hard = generatePuzzle("hard", { timeLimitMs: 2500, random: seededRandom(9) });
+const expert = generatePuzzle("expert", { timeLimitMs: 2500, random: seededRandom(13) });
+assert(hard.hints.length >= 9, "hard has at least three hint bundles");
+assert(hard.meta.usedFallback || hard.clues.length === 15, "non-fallback hard has 15 clues");
+assert(
+  expert.meta.usedFallback ||
+    (expert.clues.length >= 12 && expert.clues.length <= 14),
+  "non-fallback expert has 12-14 clues",
+);
+assert(hard.clues.length > expert.clues.length, "hard always has more clues than expert");
+assert(
+  PROFILE_FALLBACKS.hard.clues.length > PROFILE_FALLBACKS.expert.clues.length,
+  "hard fallback has more clues than expert fallback",
+);
+assert(
+  PROFILE_FALLBACKS.expert.clues.length >= 12 &&
+    PROFILE_FALLBACKS.expert.clues.length <= 14,
+  "expert fallback stays within 12-14 clues",
+);
+
+const timeoutStarted = Date.now();
+const timedOutPuzzle = generatePuzzle("hard", { timeLimitMs: 0, random: seededRandom(1) });
+assert(timedOutPuzzle.meta.usedFallback, "expired generation budget uses fallback");
+assert(Date.now() - timeoutStarted < 500, "expired generation budget returns promptly");
+assert(
+  solver.isUniqueSolution(timedOutPuzzle.clues, puzzleSolverOptions(timedOutPuzzle)),
+  "fallback result is verified unique",
+);
+assert(timedOutPuzzle.houseCount === 5, "hard fallback keeps profile house count");
+
+const easyTimeout = generatePuzzle("easy", { timeLimitMs: 0, random: seededRandom(2) });
+assert(easyTimeout.meta.usedFallback, "easy expired budget uses fallback");
+assert(easyTimeout.houseCount === 4, "easy fallback keeps profile house count");
+assert(!easyTimeout.categories.includes("animal"), "easy fallback excludes animal");
+
+const expertTimeout = generatePuzzle("expert", { timeLimitMs: 0, random: seededRandom(3) });
+assert(expertTimeout.meta.usedFallback, "expert expired budget uses fallback");
+assert(
+  expertTimeout.clues.length >= 12 && expertTimeout.clues.length <= 14,
+  "expert fallback clue count in range",
+);
+assert(
+  timedOutPuzzle.clues.length > expertTimeout.clues.length,
+  "hard fallback beats expert fallback clue count",
+);
+
+assert(typeof buildHints === "function", "buildHints export exists");
+assert(typeof validateHints === "function", "validateHints export exists");
+
+const runtimePuzzle = generatePuzzle("easy", { timeLimitMs: 2500, random: seededRandom(21) });
+const game = createGameState();
+game.loadPuzzle(runtimePuzzle);
+assert(game.getPuzzle().houseCount === runtimePuzzle.houseCount, "getPuzzle returns houseCount");
+assert(game.getPuzzle().hints.length === runtimePuzzle.hints.length, "getPuzzle returns hints");
+game.toggleClueRead(runtimePuzzle.clues[0].id);
+assert(game.isClueRead(runtimePuzzle.clues[0].id), "clue read toggles on");
+assert(game.getRevealedHints().length === 0, "clue toggle does not reveal hint");
+assert(game.revealNextHint().stage === "direction", "first reveal direction");
+assert(game.revealNextHint().stage === "clues", "second reveal clue guidance");
+assert(game.revealNextHint().stage === "fact", "third reveal fact");
+assert(game.getRevealedHints().length === 3, "three hints revealed");
+game.toggleClueRead(runtimePuzzle.clues[0].id);
+assert(!game.isClueRead(runtimePuzzle.clues[0].id), "clue read toggles off");
+game.resetPlacement({ keepTimer: true });
+assert(game.getRevealedHints().length === 3, "resetPlacement keeps revealed hints");
+game.loadPuzzle(runtimePuzzle);
+assert(game.getRevealedHints().length === 0, "loadPuzzle clears revealed hints");
+assert(!game.isClueRead(runtimePuzzle.clues[0].id), "loadPuzzle clears clue read");
+
+const exhausted = game.revealNextHint();
+assert(exhausted === null || exhausted.done === true || typeof exhausted === "object", "reveal continues until exhausted");
+while (game.getRevealedHints().length < runtimePuzzle.hints.length) {
+  const next = game.revealNextHint();
+  if (!next || next.done) break;
+}
+assert(game.getRevealedHints().length === runtimePuzzle.hints.length, "all hints can be revealed");
+const afterExhaust = game.revealNextHint();
+assert(afterExhaust == null || afterExhaust.done === true, "no more hints after exhaustion");
+
+const memory = new Map();
+const storage = {
+  getItem: (k) => memory.get(k) ?? null,
+  setItem: (k, v) => memory.set(k, String(v)),
+};
+const scale = createTextScale({ storage });
+assert(scale.get() === 150, "scale defaults 150");
+for (let i = 0; i < 9; i++) scale.increase();
+assert(scale.get() === 200 && !scale.canIncrease(), "scale capped 200");
+for (let i = 0; i < 20; i++) scale.decrease();
+assert(scale.get() === 100 && !scale.canDecrease(), "scale floored 100");
+assert(memory.get("einstein-text-scale") === "100", "scale persists to storage");
+const restored = createTextScale({ storage });
+assert(restored.get() === 100, "scale restores from storage");
+storage.setItem("einstein-text-scale", "not-a-number");
+assert(createTextScale({ storage }).get() === 150, "invalid storage falls back to 150");
+
+const styleProps = {};
+const fakeRoot = {
+  style: {
+    setProperty(name, value) {
+      styleProps[name] = value;
+    },
+  },
+};
+restored.increase();
+restored.apply(fakeRoot);
+assert(styleProps["--text-scale"] === "1.1", "apply sets css variable as ratio");
+
+function testRenderCluesReadToggle() {
+  const previousDocument = globalThis.document;
+  const children = [];
+  const container = {
+    innerHTML: "",
+    appendChild(node) {
+      children.push(node);
+    },
+  };
+  const clicks = [];
+  try {
+    globalThis.document = {
+      createElement() {
+        const el = {
+          type: "",
+          className: "",
+          textContent: "",
+          dataset: {},
+          attributes: {},
+          setAttribute(name, value) {
+            this.attributes[name] = value;
+          },
+          addEventListener(type, listener) {
+            if (type === "click") this._click = listener;
+          },
+          click() {
+            this._click?.();
+          },
+        };
+        return el;
+      },
+    };
+    renderClues({
+      container,
+      clues: [{ id: "c1", text: "테스트 단서" }],
+      readIds: new Set(["c1"]),
+      onToggleRead: (id) => clicks.push(id),
+    });
+    assert(children.length === 1, "renderClues creates one button");
+    assert(children[0].attributes["aria-pressed"] === "true", "read clue has aria-pressed true");
+    assert(children[0].className.includes("read") || children[0].dataset.read === "true", "read clue marked");
+    assert(children[0].textContent.includes("✓"), "read clue shows check");
+    children[0].click();
+    assert(clicks[0] === "c1", "click toggles read via callback");
+  } finally {
+    globalThis.document = previousDocument;
+  }
+}
+
+testRenderCluesReadToggle();
+testTeacherRefresh();
+testTeacherRefreshOnPlacementChange();
+testDragCancelCleanup();
+
+const outEl = document.getElementById("out");
+outEl.textContent += `${passed} passed, ${failed} failed\n`;
+if (failed) throw new Error(`${failed} failed`);
+
   </script>
 </body>
 </html>

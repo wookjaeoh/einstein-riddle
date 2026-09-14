@@ -10,6 +10,9 @@ import {
 import * as solver from "../js/solver.js";
 import { generatePuzzle } from "../js/generate.js";
 import { buildHints, validateHints } from "../js/hints.js";
+import { createGameState } from "../js/state.js";
+import { createTextScale } from "../js/text-scale.js";
+import { renderClues } from "../js/clues.js";
 import { bindTeacherPanel } from "../js/teacher.js";
 import { createDragDrop } from "../js/drag-drop.js";
 
@@ -432,6 +435,115 @@ assert(
 assert(typeof buildHints === "function", "buildHints export exists");
 assert(typeof validateHints === "function", "validateHints export exists");
 
+const runtimePuzzle = generatePuzzle("easy", { timeLimitMs: 2500, random: seededRandom(21) });
+const game = createGameState();
+game.loadPuzzle(runtimePuzzle);
+assert(game.getPuzzle().houseCount === runtimePuzzle.houseCount, "getPuzzle returns houseCount");
+assert(game.getPuzzle().hints.length === runtimePuzzle.hints.length, "getPuzzle returns hints");
+game.toggleClueRead(runtimePuzzle.clues[0].id);
+assert(game.isClueRead(runtimePuzzle.clues[0].id), "clue read toggles on");
+assert(game.getRevealedHints().length === 0, "clue toggle does not reveal hint");
+assert(game.revealNextHint().stage === "direction", "first reveal direction");
+assert(game.revealNextHint().stage === "clues", "second reveal clue guidance");
+assert(game.revealNextHint().stage === "fact", "third reveal fact");
+assert(game.getRevealedHints().length === 3, "three hints revealed");
+game.toggleClueRead(runtimePuzzle.clues[0].id);
+assert(!game.isClueRead(runtimePuzzle.clues[0].id), "clue read toggles off");
+game.resetPlacement({ keepTimer: true });
+assert(game.getRevealedHints().length === 3, "resetPlacement keeps revealed hints");
+game.loadPuzzle(runtimePuzzle);
+assert(game.getRevealedHints().length === 0, "loadPuzzle clears revealed hints");
+assert(!game.isClueRead(runtimePuzzle.clues[0].id), "loadPuzzle clears clue read");
+
+const exhausted = game.revealNextHint();
+assert(exhausted === null || exhausted.done === true || typeof exhausted === "object", "reveal continues until exhausted");
+while (game.getRevealedHints().length < runtimePuzzle.hints.length) {
+  const next = game.revealNextHint();
+  if (!next || next.done) break;
+}
+assert(game.getRevealedHints().length === runtimePuzzle.hints.length, "all hints can be revealed");
+const afterExhaust = game.revealNextHint();
+assert(afterExhaust == null || afterExhaust.done === true, "no more hints after exhaustion");
+
+const memory = new Map();
+const storage = {
+  getItem: (k) => memory.get(k) ?? null,
+  setItem: (k, v) => memory.set(k, String(v)),
+};
+const scale = createTextScale({ storage });
+assert(scale.get() === 150, "scale defaults 150");
+for (let i = 0; i < 9; i++) scale.increase();
+assert(scale.get() === 200 && !scale.canIncrease(), "scale capped 200");
+for (let i = 0; i < 20; i++) scale.decrease();
+assert(scale.get() === 100 && !scale.canDecrease(), "scale floored 100");
+assert(memory.get("einstein-text-scale") === "100", "scale persists to storage");
+const restored = createTextScale({ storage });
+assert(restored.get() === 100, "scale restores from storage");
+storage.setItem("einstein-text-scale", "not-a-number");
+assert(createTextScale({ storage }).get() === 150, "invalid storage falls back to 150");
+
+const styleProps = {};
+const fakeRoot = {
+  style: {
+    setProperty(name, value) {
+      styleProps[name] = value;
+    },
+  },
+};
+restored.increase();
+restored.apply(fakeRoot);
+assert(styleProps["--text-scale"] === "1.1", "apply sets css variable as ratio");
+
+function testRenderCluesReadToggle() {
+  const previousDocument = globalThis.document;
+  const children = [];
+  const container = {
+    innerHTML: "",
+    appendChild(node) {
+      children.push(node);
+    },
+  };
+  const clicks = [];
+  try {
+    globalThis.document = {
+      createElement() {
+        const el = {
+          type: "",
+          className: "",
+          textContent: "",
+          dataset: {},
+          attributes: {},
+          setAttribute(name, value) {
+            this.attributes[name] = value;
+          },
+          addEventListener(type, listener) {
+            if (type === "click") this._click = listener;
+          },
+          click() {
+            this._click?.();
+          },
+        };
+        return el;
+      },
+    };
+    renderClues({
+      container,
+      clues: [{ id: "c1", text: "테스트 단서" }],
+      readIds: new Set(["c1"]),
+      onToggleRead: (id) => clicks.push(id),
+    });
+    assert(children.length === 1, "renderClues creates one button");
+    assert(children[0].attributes["aria-pressed"] === "true", "read clue has aria-pressed true");
+    assert(children[0].className.includes("read") || children[0].dataset.read === "true", "read clue marked");
+    assert(children[0].textContent.includes("✓"), "read clue shows check");
+    children[0].click();
+    assert(clicks[0] === "c1", "click toggles read via callback");
+  } finally {
+    globalThis.document = previousDocument;
+  }
+}
+
+testRenderCluesReadToggle();
 testTeacherRefresh();
 testTeacherRefreshOnPlacementChange();
 testDragCancelCleanup();

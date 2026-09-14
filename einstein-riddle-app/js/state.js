@@ -2,20 +2,44 @@ import { CATEGORIES, VALUES } from "./puzzle-data.js";
 
 const MAX_UNDO = 30;
 
-function emptyPlacement() {
-  return Object.fromEntries(CATEGORIES.map((c) => [c, [null, null, null, null, null]]));
+function emptyPlacement(categories, houseCount) {
+  return Object.fromEntries(
+    categories.map((c) => [c, Array.from({ length: houseCount }, () => null)]),
+  );
 }
 
-function clonePlacement(p) {
-  return Object.fromEntries(CATEGORIES.map((c) => [c, [...p[c]]]));
+function clonePlacement(p, categories) {
+  return Object.fromEntries(categories.map((c) => [c, [...(p[c] ?? [])]]));
+}
+
+function clonePuzzle(puzzle) {
+  return {
+    houseCount: puzzle.houseCount,
+    categories: [...puzzle.categories],
+    values: Object.fromEntries(
+      puzzle.categories.map((cat) => [cat, [...puzzle.values[cat]]]),
+    ),
+    answer: structuredClone(puzzle.answer),
+    clues: puzzle.clues.map((clue) => structuredClone(clue)),
+    hints: (puzzle.hints ?? []).map((hint) => structuredClone(hint)),
+    difficulty: puzzle.difficulty,
+    meta: puzzle.meta ? structuredClone(puzzle.meta) : undefined,
+  };
 }
 
 export function createGameState() {
+  let puzzle = null;
   let answer = null;
   let clues = [];
+  let hints = [];
   let difficulty = "easy";
-  let placement = emptyPlacement();
+  let categories = [...CATEGORIES];
+  let values = VALUES;
+  let houseCount = 5;
+  let placement = emptyPlacement(categories, houseCount);
   let history = [];
+  let readClueIds = new Set();
+  let revealedHintCount = 0;
 
   let timerStart = null;
   let timerAccum = 0;
@@ -27,13 +51,26 @@ export function createGameState() {
     timerRunning = false;
   }
 
-  function loadPuzzle({ answer: ans, clues: cls, difficulty: diff }) {
-    answer = structuredClone(ans);
-    clues = [...cls];
-    difficulty = diff ?? "easy";
-    placement = emptyPlacement();
+  function loadPuzzle(runtimePuzzle) {
+    puzzle = clonePuzzle(runtimePuzzle);
+    answer = structuredClone(runtimePuzzle.answer);
+    clues = runtimePuzzle.clues.map((clue) => structuredClone(clue));
+    hints = (runtimePuzzle.hints ?? []).map((hint) => structuredClone(hint));
+    difficulty = runtimePuzzle.difficulty ?? "easy";
+    categories = [...runtimePuzzle.categories];
+    values = Object.fromEntries(
+      categories.map((cat) => [cat, [...runtimePuzzle.values[cat]]]),
+    );
+    houseCount = runtimePuzzle.houseCount;
+    placement = emptyPlacement(categories, houseCount);
     history = [];
+    readClueIds = new Set();
+    revealedHintCount = 0;
     resetTimer();
+  }
+
+  function getPuzzle() {
+    return puzzle ? clonePuzzle(puzzle) : null;
   }
 
   function getAnswer() {
@@ -41,11 +78,11 @@ export function createGameState() {
   }
 
   function getClues() {
-    return [...clues];
+    return clues.map((clue) => structuredClone(clue));
   }
 
   function getPlacement() {
-    return clonePlacement(placement);
+    return clonePlacement(placement, categories);
   }
 
   function getDifficulty() {
@@ -53,7 +90,7 @@ export function createGameState() {
   }
 
   function resetPlacement({ keepTimer = false } = {}) {
-    placement = emptyPlacement();
+    placement = emptyPlacement(categories, houseCount);
     history = [];
     if (!keepTimer) resetTimer();
   }
@@ -83,8 +120,8 @@ export function createGameState() {
   }
 
   function slotOf(category, value) {
-    const row = placement[category];
-    for (let i = 0; i < 5; i++) {
+    const row = placement[category] ?? [];
+    for (let i = 0; i < houseCount; i++) {
       if (row[i] === value) return i;
     }
     return -1;
@@ -92,11 +129,12 @@ export function createGameState() {
 
   function moveCard({ value, category, from, to }) {
     if (!answer) return false;
-    if (!VALUES[category]?.includes(value)) return false;
+    if (!categories.includes(category)) return false;
+    if (!values[category]?.includes(value)) return false;
 
     if (from.type === "slot") {
       if (from.category !== category) return false;
-      if (from.houseIndex < 0 || from.houseIndex > 4) return false;
+      if (from.houseIndex < 0 || from.houseIndex >= houseCount) return false;
       if (placement[category][from.houseIndex] !== value) return false;
     } else if (from.type === "pool") {
       if (slotOf(category, value) !== -1) return false;
@@ -106,7 +144,7 @@ export function createGameState() {
 
     if (to.type === "slot") {
       if (to.category !== category) return false;
-      if (to.houseIndex < 0 || to.houseIndex > 4) return false;
+      if (to.houseIndex < 0 || to.houseIndex >= houseCount) return false;
     } else if (to.type !== "pool") {
       return false;
     }
@@ -121,7 +159,7 @@ export function createGameState() {
     }
     if (from.type === "pool" && to.type === "pool") return false;
 
-    history.push(clonePlacement(placement));
+    history.push(clonePlacement(placement, categories));
     if (history.length > MAX_UNDO) history.shift();
 
     ensureTimerStarted();
@@ -153,8 +191,29 @@ export function createGameState() {
     placement = history.pop();
   }
 
+  function toggleClueRead(id) {
+    if (readClueIds.has(id)) readClueIds.delete(id);
+    else readClueIds.add(id);
+  }
+
+  function isClueRead(id) {
+    return readClueIds.has(id);
+  }
+
+  function getRevealedHints() {
+    return hints.slice(0, revealedHintCount).map((hint) => structuredClone(hint));
+  }
+
+  function revealNextHint() {
+    if (revealedHintCount >= hints.length) return null;
+    const hint = hints[revealedHintCount];
+    revealedHintCount += 1;
+    return structuredClone(hint);
+  }
+
   return {
     loadPuzzle,
+    getPuzzle,
     getAnswer,
     getClues,
     getPlacement,
@@ -167,5 +226,9 @@ export function createGameState() {
     stopTimer,
     getElapsedMs,
     isTimerRunning,
+    toggleClueRead,
+    isClueRead,
+    revealNextHint,
+    getRevealedHints,
   };
 }
