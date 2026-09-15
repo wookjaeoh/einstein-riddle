@@ -1,42 +1,41 @@
-function creds() {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) {
-    const err = new Error("redis_misconfigured");
-    err.code = "redis_misconfigured";
-    throw err;
-  }
-  return { url: url.replace(/\/$/, ""), token };
+import { list, put } from "@vercel/blob";
+
+function pathFor(key) {
+  return `rankings/${String(key).replace(/[^a-zA-Z0-9:_-]/g, "_")}.json`;
 }
 
-async function redisCommand(command) {
-  const { url, token } = creds();
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(command),
-  });
-  if (!res.ok) {
-    throw new Error(`redis_${res.status}`);
+function ensureToken() {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    const err = new Error("blob_misconfigured");
+    err.code = "blob_misconfigured";
+    throw err;
   }
-  return res.json();
 }
 
 export async function redisGetJson(key) {
-  const data = await redisCommand(["GET", key]);
-  if (data.result == null) return null;
-  if (typeof data.result === "object") return data.result;
-  try {
-    return JSON.parse(data.result);
-  } catch {
-    return null;
-  }
+  ensureToken();
+  const pathname = pathFor(key);
+  const { blobs } = await list({
+    prefix: pathname,
+    limit: 10,
+    token: process.env.BLOB_READ_WRITE_TOKEN,
+  });
+  const match = blobs.find((b) => b.pathname === pathname);
+  if (!match?.url) return null;
+  const res = await fetch(match.url, { cache: "no-store" });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`blob_get_${res.status}`);
+  return res.json();
 }
 
 export async function redisSetJson(key, value) {
-  const data = await redisCommand(["SET", key, JSON.stringify(value)]);
-  if (data.error) throw new Error(String(data.error));
+  ensureToken();
+  const pathname = pathFor(key);
+  await put(pathname, JSON.stringify(value), {
+    access: "public",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+    token: process.env.BLOB_READ_WRITE_TOKEN,
+  });
 }

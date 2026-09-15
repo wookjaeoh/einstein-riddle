@@ -104,12 +104,11 @@ export default async function handler(req, res) {
 
     sendJson(res, 405, { error: "method_not_allowed" });
   } catch (error) {
-    const detail = error?.code || error?.message || "redis_unavailable";
+    const detail = error?.code || error?.message || "store_unavailable";
     sendJson(res, 503, {
-      error: "redis_unavailable",
+      error: "store_unavailable",
       detail: String(detail).slice(0, 160),
-      hasUrl: Boolean(process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL),
-      hasToken: Boolean(process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN),
+      hasBlob: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
     });
   }
 }

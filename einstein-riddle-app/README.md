@@ -65,11 +65,9 @@ USB 폴더 복사·오프라인 수업도 가능. 인터넷은 `npx serve` 최�
 | 변수 | 설명 |
 |------|------|
 | `LOGIN_PIN` | 숫자 4자리 수업용 암호 |
-| `KV_REST_API_URL` | Upstash / Vercel KV REST URL |
-| `KV_REST_API_TOKEN` | Upstash / Vercel KV REST 토큰 |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob 저장소 토큰 (랭킹 JSON) |
 
-Vercel 대시보드에서 Upstash Redis를 연결하면 `KV_*` 변수가 자동 주입될 수 있습니다.  
-(`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` 도 인식합니다.)
+Vercel Blob 스토어(`einstein-rankings`)를 프로젝트에 연결하면 `BLOB_READ_WRITE_TOKEN`이 자동 주입됩니다.
 
 - 인트로 「로그인」: 이름 · 구분(학생/교사/일반) · 4자리 암호
 - 정답 제출 시 랭킹 등록 여부 선택. 학생·교사는 학교명 입력 후 등록
