@@ -1,4 +1,4 @@
-import { LABELS, labelOf } from "./puzzle-data.js";
+import { LABELS, labelOf, formatCardLabel } from "./puzzle-data.js";
 import { createGameState } from "./state.js";
 import { bindDragDrop } from "./drag-drop.js";
 import { renderClues } from "./clues.js";
@@ -93,7 +93,7 @@ function renderBoard() {
     for (let i = 0; i < houseCount; i++) {
       const v = placement[cat][i];
       html += `<div class="slot" data-house-index="${i}" data-category="${cat}">
-        ${v ? `<span class="card" draggable="false" data-value="${v}" data-category="${cat}">${labelOf(v)}</span>` : ""}
+        ${v ? `<span class="card" draggable="false" data-value="${v}" data-category="${cat}">${formatCardLabel(v)}</span>` : ""}
       </div>`;
     }
   }
@@ -114,7 +114,7 @@ function renderPool() {
   for (const cat of puzzle.categories) {
     for (const v of puzzle.values[cat]) {
       if (used.has(v)) continue;
-      html += `<span class="card" data-value="${v}" data-category="${cat}">${labelOf(v)}</span>`;
+      html += `<span class="card" data-value="${v}" data-category="${cat}">${formatCardLabel(v)}</span>`;
     }
   }
   pool.innerHTML = html || "<span>모든 카드가 배치되었습니다</span>";
@@ -237,7 +237,7 @@ async function flyCardToSlot(step) {
   const ghost = source?.cloneNode(true) ?? document.createElement("span");
   if (!source) {
     ghost.className = "card";
-    ghost.textContent = labelOf(step.value);
+    ghost.textContent = formatCardLabel(step.value);
   }
   ghost.classList.add("answer-fly-ghost");
   Object.assign(ghost.style, {
