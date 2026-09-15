@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8" /><title>Einstein tests</title></head><body><h1>Tests</h1><pre id="out"></pre><script type="module">
+﻿<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8" /><title>Einstein tests</title></head><body><h1>Tests</h1><pre id="out"></pre><script type="module">
 import {
   CATEGORIES,
   VALUES,
@@ -20,6 +20,14 @@ import { buildAnswerFillQueue, shouldContinueReveal } from "../js/answer-fill.js
 import { createTextScale } from "../js/text-scale.js";
 import { renderClues } from "../js/clues.js";
 import { createDragDrop } from "../js/drag-drop.js";
+import {
+  normalizeField,
+  identityKey,
+  upsertBestEntry,
+  MAX_ENTRIES,
+} from "../lib/ranking-logic.mjs";
+import { isValidPinFormat, checkPin } from "../lib/pin.mjs";
+import { normalizeRankingPost } from "../lib/ranking-api.mjs";
 
 let failed = 0;
 let passed = 0;
@@ -58,11 +66,97 @@ async function assertDomContracts() {
   assert(html.includes('id="screen-howto"'), "howto screen exists");
   assert(html.includes('id="btn-intro-start"'), "intro start button exists");
   assert(html.includes('id="btn-howto-start"'), "howto start button exists");
+  assert(html.includes('id="btn-intro-login"'), "intro login button");
+  assert(html.includes('id="login-modal"'), "login modal");
+  assert(html.includes('id="login-name"'), "login name field");
+  assert(html.includes('id="login-role"'), "login role field");
+  assert(html.includes('id="login-pin"'), "login pin field");
+  assert(html.includes('id="login-status"'), "login status");
+  assert(html.includes('id="btn-ranking"'), "toolbar ranking button");
+  assert(html.includes('id="celebrate-modal"'), "celebrate modal");
+  assert(html.includes('id="ranking-modal"'), "ranking modal");
+  assert(html.includes('id="school-modal"'), "school modal");
   assert(!html.includes('id="btn-teacher"'), "teacher button removed");
   assert(!mainSource.includes("./teacher.js"), "teacher import removed");
 }
 
 await assertDomContracts();
+
+function testRankingLogic() {
+  assert(normalizeField("  ?? 湲몃룞 ") === "??湲몃룞", "normalize collapses spaces");
+  const keyA = identityKey({ name: "?띻만??, role: "student", school: "愿묒＜怨?, difficulty: "normal" });
+  const keyB = identityKey({ name: " ?띻만??", role: "student", school: " 愿묒＜怨?", difficulty: "normal" });
+  assert(keyA === keyB, "identityKey ignores surrounding spaces");
+
+  const first = {
+    id: "1",
+    name: "?띻만??,
+    role: "student",
+    school: "愿묒＜怨?,
+    timeMs: 90000,
+    difficulty: "normal",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+  let r = upsertBestEntry([], first);
+  assert(r.status === "saved" && r.entries.length === 1, "first insert saved");
+
+  r = upsertBestEntry(r.entries, { ...first, id: "2", timeMs: 80000, createdAt: "2026-01-02T00:00:00.000Z" });
+  assert(r.status === "saved" && r.entries.length === 1 && r.entries[0].timeMs === 80000, "faster replaces");
+
+  r = upsertBestEntry(r.entries, { ...first, id: "3", timeMs: 85000 });
+  assert(r.status === "not_improved" && r.entries[0].timeMs === 80000, "slower rejected");
+  assert(r.message === "?대? ??醫뗭? 湲곕줉???덉뒿?덈떎", "not_improved Korean message");
+
+  const gen = {
+    id: "g1",
+    name: "?먮떂",
+    role: "general",
+    school: "",
+    timeMs: 1000,
+    difficulty: "easy",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+  r = upsertBestEntry([], gen);
+  assert(r.entries[0].school === "", "general empty school");
+
+  const many = Array.from({ length: 55 }, (_, i) => ({
+    id: String(i),
+    name: `n${i}`,
+    role: "general",
+    school: "",
+    timeMs: 1000 + i,
+    difficulty: "easy",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  }));
+  r = upsertBestEntry(many.slice(0, 50), many[50]);
+  assert(r.entries.length <= MAX_ENTRIES, "trimmed to MAX_ENTRIES");
+  assert(r.entries[0].timeMs <= r.entries[r.entries.length - 1].timeMs, "sorted ascending by timeMs");
+}
+testRankingLogic();
+
+function testPin() {
+  assert(isValidPinFormat("1234"), "4 digits ok");
+  assert(!isValidPinFormat("12a4"), "non-digit rejected");
+  assert(!isValidPinFormat("123"), "short rejected");
+  assert(checkPin("1234", "1234").ok === true, "matching pin ok");
+  assert(checkPin("9999", "1234").error === "invalid_pin", "wrong pin");
+  assert(checkPin("1234", undefined).error === "misconfigured", "missing env");
+}
+testPin();
+
+function testRankingApiNormalize() {
+  assert(
+    normalizeRankingPost({ name: "A", role: "student", school: "", difficulty: "easy", timeMs: 1 }).error ===
+      "school_required",
+    "student needs school",
+  );
+  assert(
+    normalizeRankingPost({ name: "A", role: "general", school: "X", difficulty: "easy", timeMs: 1 }).value
+      .school === "",
+    "general clears school",
+  );
+}
+testRankingApiNormalize();
 
 function seededRandom(seed) {
   let state = seed >>> 0;
@@ -340,7 +434,7 @@ assert(
   "hint fact matches answer placement",
 );
 assert(
-  easy.hints[1].text.includes("번") && !easy.hints[1].text.includes("2번과 5번"),
+  easy.hints[1].text.includes("踰?) && !easy.hints[1].text.includes("2踰덇낵 5踰?),
   "hint clue numbers come from generated puzzle",
 );
 
@@ -349,8 +443,8 @@ assert(validateHints(reasoningPuzzle), "validateHints accepts puzzle with reason
 for (const hint of reasoningPuzzle.hints.filter((h) => h.stage === "fact")) {
   assert(Array.isArray(hint.reasoning), `fact ${hint.id} has reasoning array`);
   assert(hint.reasoning.length >= 2 && hint.reasoning.length <= 3, `fact ${hint.id} reasoning 2-3 steps`);
-  assert(hint.reasoning.some((line) => line.includes("단서") && line.includes("「")), `fact ${hint.id} cites clue quote`);
-  assert(hint.reasoning.some((line) => /①|1\./.test(line) || line.includes("①")), `fact ${hint.id} numbered steps`);
+  assert(hint.reasoning.some((line) => line.includes("?⑥꽌") && line.includes("??)), `fact ${hint.id} cites clue quote`);
+  assert(hint.reasoning.some((line) => /??1\./.test(line) || line.includes("??)), `fact ${hint.id} numbered steps`);
 }
 
 function clueRelatesToFact(clue, factMeta, answer) {
@@ -382,7 +476,7 @@ function clueMentionsFactValue(clue, factMeta) {
 function assertFactCitationsRelate(puzzle, label) {
   for (const hint of puzzle.hints.filter((candidate) => candidate.stage === "fact")) {
     const citedNumbers = hint.reasoning.flatMap((line) =>
-      [...line.matchAll(/단서\s+(\d+)/g)].map((match) => Number(match[1])),
+      [...line.matchAll(/?⑥꽌\s+(\d+)/g)].map((match) => Number(match[1])),
     );
     assert(citedNumbers.length >= 1, `${label} ${hint.id} cites at least one clue`);
     assert(
@@ -417,7 +511,7 @@ const fallbackReasoningPuzzle = {
       kind: "nextTo",
       a: { cat: "color", val: "yellow" },
       b: { cat: "nation", val: "denmark" },
-      text: "노란 집은 덴마크 사람이 사는 집 옆에 있다.",
+      text: "?몃? 吏묒? ?대쭏???щ엺???щ뒗 吏??놁뿉 ?덈떎.",
       values: ["yellow", "denmark"],
     },
     {
@@ -425,7 +519,7 @@ const fallbackReasoningPuzzle = {
       kind: "leftOf",
       a: { cat: "drink", val: "tea" },
       b: { cat: "drink", val: "milk" },
-      text: "차를 마시는 집은 우유를 마시는 집 왼쪽에 있다.",
+      text: "李⑤? 留덉떆??吏묒? ?곗쑀瑜?留덉떆??吏??쇱そ???덈떎.",
       values: ["tea", "milk"],
     },
     {
@@ -433,7 +527,7 @@ const fallbackReasoningPuzzle = {
       kind: "nextTo",
       a: { cat: "food", val: "pizza" },
       b: { cat: "nation", val: "sweden" },
-      text: "피자를 먹는 집은 스웨덴 사람이 사는 집 옆에 있다.",
+      text: "?쇱옄瑜?癒밸뒗 吏묒? ?ㅼ썾???щ엺???щ뒗 吏??놁뿉 ?덈떎.",
       values: ["pizza", "sweden"],
     },
   ],
@@ -583,14 +677,14 @@ function testRenderCluesReadToggle() {
     };
     renderClues({
       container,
-      clues: [{ id: "c1", text: "테스트 단서" }],
+      clues: [{ id: "c1", text: "?뚯뒪???⑥꽌" }],
       readIds: new Set(["c1"]),
       onToggleRead: (id) => clicks.push(id),
     });
     assert(children.length === 1, "renderClues creates one button");
     assert(children[0].attributes["aria-pressed"] === "true", "read clue has aria-pressed true");
     assert(children[0].className.includes("read") || children[0].dataset.read === "true", "read clue marked");
-    assert(children[0].textContent.includes("✓"), "read clue shows check");
+    assert(children[0].textContent.includes("??), "read clue shows check");
     children[0].click();
     assert(clicks[0] === "c1", "click toggles read via callback");
   } finally {
@@ -670,14 +764,13 @@ for (const cat of Object.keys(VALUES)) {
     assert(formatCardLabel(id).includes(iconOf(id)), `formatCardLabel includes icon for ${id}`);
   }
 }
-assert(formatCardLabel("england").includes("🇬🇧"), "england flag");
-assert(formatCardLabel("england").includes("영국"), "england Korean");
-assert(formatCardLabel("dog").includes("🐕"), "dog emoji");
-assert(formatCardLabel("dog").includes("개"), "dog Korean");
+assert(formatCardLabel("england").includes("?눐?눉"), "england flag");
+assert(formatCardLabel("england").includes("?곴뎅"), "england Korean");
+assert(formatCardLabel("dog").includes("?릷"), "dog emoji");
+assert(formatCardLabel("dog").includes("媛?), "dog Korean");
 assert(!Object.prototype.hasOwnProperty.call(ICONS, "color"), "category keys are not in ICONS");
 
 const outEl = document.getElementById("out");
 outEl.textContent += `${passed} passed, ${failed} failed\n`;
 if (failed) throw new Error(`${failed} failed`);
-
 </script></body></html>

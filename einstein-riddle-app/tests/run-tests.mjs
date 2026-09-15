@@ -19,6 +19,14 @@ import { buildAnswerFillQueue, shouldContinueReveal } from "../js/answer-fill.js
 import { createTextScale } from "../js/text-scale.js";
 import { renderClues } from "../js/clues.js";
 import { createDragDrop } from "../js/drag-drop.js";
+import {
+  normalizeField,
+  identityKey,
+  upsertBestEntry,
+  MAX_ENTRIES,
+} from "../lib/ranking-logic.mjs";
+import { isValidPinFormat, checkPin } from "../lib/pin.mjs";
+import { normalizeRankingPost } from "../lib/ranking-api.mjs";
 
 let failed = 0;
 let passed = 0;
@@ -57,11 +65,97 @@ async function assertDomContracts() {
   assert(html.includes('id="screen-howto"'), "howto screen exists");
   assert(html.includes('id="btn-intro-start"'), "intro start button exists");
   assert(html.includes('id="btn-howto-start"'), "howto start button exists");
+  assert(html.includes('id="btn-intro-login"'), "intro login button");
+  assert(html.includes('id="login-modal"'), "login modal");
+  assert(html.includes('id="login-name"'), "login name field");
+  assert(html.includes('id="login-role"'), "login role field");
+  assert(html.includes('id="login-pin"'), "login pin field");
+  assert(html.includes('id="login-status"'), "login status");
+  assert(html.includes('id="btn-ranking"'), "toolbar ranking button");
+  assert(html.includes('id="celebrate-modal"'), "celebrate modal");
+  assert(html.includes('id="ranking-modal"'), "ranking modal");
+  assert(html.includes('id="school-modal"'), "school modal");
   assert(!html.includes('id="btn-teacher"'), "teacher button removed");
   assert(!mainSource.includes("./teacher.js"), "teacher import removed");
 }
 
 await assertDomContracts();
+
+function testRankingLogic() {
+  assert(normalizeField("  홍  길동 ") === "홍 길동", "normalize collapses spaces");
+  const keyA = identityKey({ name: "홍길동", role: "student", school: "광주고", difficulty: "normal" });
+  const keyB = identityKey({ name: " 홍길동 ", role: "student", school: " 광주고 ", difficulty: "normal" });
+  assert(keyA === keyB, "identityKey ignores surrounding spaces");
+
+  const first = {
+    id: "1",
+    name: "홍길동",
+    role: "student",
+    school: "광주고",
+    timeMs: 90000,
+    difficulty: "normal",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+  let r = upsertBestEntry([], first);
+  assert(r.status === "saved" && r.entries.length === 1, "first insert saved");
+
+  r = upsertBestEntry(r.entries, { ...first, id: "2", timeMs: 80000, createdAt: "2026-01-02T00:00:00.000Z" });
+  assert(r.status === "saved" && r.entries.length === 1 && r.entries[0].timeMs === 80000, "faster replaces");
+
+  r = upsertBestEntry(r.entries, { ...first, id: "3", timeMs: 85000 });
+  assert(r.status === "not_improved" && r.entries[0].timeMs === 80000, "slower rejected");
+  assert(r.message === "이미 더 좋은 기록이 있습니다", "not_improved Korean message");
+
+  const gen = {
+    id: "g1",
+    name: "손님",
+    role: "general",
+    school: "",
+    timeMs: 1000,
+    difficulty: "easy",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+  r = upsertBestEntry([], gen);
+  assert(r.entries[0].school === "", "general empty school");
+
+  const many = Array.from({ length: 55 }, (_, i) => ({
+    id: String(i),
+    name: `n${i}`,
+    role: "general",
+    school: "",
+    timeMs: 1000 + i,
+    difficulty: "easy",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  }));
+  r = upsertBestEntry(many.slice(0, 50), many[50]);
+  assert(r.entries.length <= MAX_ENTRIES, "trimmed to MAX_ENTRIES");
+  assert(r.entries[0].timeMs <= r.entries[r.entries.length - 1].timeMs, "sorted ascending by timeMs");
+}
+testRankingLogic();
+
+function testPin() {
+  assert(isValidPinFormat("1234"), "4 digits ok");
+  assert(!isValidPinFormat("12a4"), "non-digit rejected");
+  assert(!isValidPinFormat("123"), "short rejected");
+  assert(checkPin("1234", "1234").ok === true, "matching pin ok");
+  assert(checkPin("9999", "1234").error === "invalid_pin", "wrong pin");
+  assert(checkPin("1234", undefined).error === "misconfigured", "missing env");
+}
+testPin();
+
+function testRankingApiNormalize() {
+  assert(
+    normalizeRankingPost({ name: "A", role: "student", school: "", difficulty: "easy", timeMs: 1 }).error ===
+      "school_required",
+    "student needs school",
+  );
+  assert(
+    normalizeRankingPost({ name: "A", role: "general", school: "X", difficulty: "easy", timeMs: 1 }).value
+      .school === "",
+    "general clears school",
+  );
+}
+testRankingApiNormalize();
 
 function seededRandom(seed) {
   let state = seed >>> 0;

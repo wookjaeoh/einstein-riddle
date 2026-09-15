@@ -30,7 +30,11 @@
     </div>
     <div class="splash-foreground">
       <h1 class="splash-title">아인슈타인 추론 게임</h1>
-      <button type="button" id="btn-intro-start" class="cta-start">게임 시작</button>
+      <div class="splash-cta-stack">
+        <button type="button" id="btn-intro-start" class="cta-start">게임 시작</button>
+        <button type="button" id="btn-intro-login" class="cta-login">로그인</button>
+        <p id="intro-auth-label" class="intro-auth-label" hidden></p>
+      </div>
     </div>
   </section>
 
@@ -68,6 +72,7 @@
         <button type="button" id="btn-undo" disabled>되돌리기</button>
         <button type="button" id="btn-reset">초기화</button>
         <button type="button" id="btn-submit" class="primary">제출</button>
+        <button type="button" id="btn-ranking">랭킹</button>
       </section>
 
       <p class="help" id="help-easy">카드를 한 번 클릭해 집고, 칸을 다시 클릭해 놓으세요.</p>
@@ -114,6 +119,69 @@
       <div class="giveup-modal__actions">
         <button type="button" id="giveup-yes" class="giveup-modal__btn giveup-modal__btn--yes">예</button>
         <button type="button" id="giveup-no" class="giveup-modal__btn giveup-modal__btn--no">아니오</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="login-modal" class="app-modal hidden" aria-hidden="true">
+    <div class="app-modal__backdrop" data-login-cancel></div>
+    <div class="app-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
+      <h2 id="login-modal-title" class="app-modal__title">로그인</h2>
+      <label class="app-modal__field">이름
+        <input id="login-name" type="text" autocomplete="nickname" required />
+      </label>
+      <label class="app-modal__field">구분
+        <select id="login-role">
+          <option value="student">학생</option>
+          <option value="teacher">교사</option>
+          <option value="general">일반</option>
+        </select>
+      </label>
+      <label class="app-modal__field">암호
+        <input id="login-pin" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" required />
+      </label>
+      <p id="login-status" class="app-modal__status" role="status"></p>
+      <div class="app-modal__actions">
+        <button type="button" id="login-confirm" class="app-modal__btn app-modal__btn--yes">확인</button>
+        <button type="button" id="login-cancel" class="app-modal__btn app-modal__btn--no">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="celebrate-modal" class="app-modal hidden" aria-hidden="true">
+    <div class="app-modal__backdrop" data-celebrate-cancel></div>
+    <div class="app-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="celebrate-message">
+      <p id="celebrate-message" class="app-modal__message"></p>
+      <div class="app-modal__actions">
+        <button type="button" id="celebrate-yes" class="app-modal__btn app-modal__btn--yes">예</button>
+        <button type="button" id="celebrate-no" class="app-modal__btn app-modal__btn--no">아니오</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="school-modal" class="app-modal hidden" aria-hidden="true">
+    <div class="app-modal__backdrop" data-school-cancel></div>
+    <div class="app-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="school-modal-title">
+      <h2 id="school-modal-title" class="app-modal__title">학교명 입력</h2>
+      <label class="app-modal__field">학교명
+        <input id="school-input" type="text" autocomplete="organization" required />
+      </label>
+      <p id="school-status" class="app-modal__status" role="status"></p>
+      <div class="app-modal__actions">
+        <button type="button" id="school-confirm" class="app-modal__btn app-modal__btn--yes">확인</button>
+        <button type="button" id="school-cancel" class="app-modal__btn app-modal__btn--no">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="ranking-modal" class="app-modal hidden" aria-hidden="true">
+    <div class="app-modal__backdrop" data-ranking-cancel></div>
+    <div class="app-modal__dialog app-modal__dialog--wide" role="dialog" aria-modal="true" aria-labelledby="ranking-title">
+      <h2 id="ranking-title" class="app-modal__title">랭킹</h2>
+      <p id="ranking-status" class="app-modal__status" role="status"></p>
+      <ol id="ranking-list" class="ranking-list"></ol>
+      <div class="app-modal__actions">
+        <button type="button" id="ranking-close" class="app-modal__btn app-modal__btn--yes">닫기</button>
       </div>
     </div>
   </div>

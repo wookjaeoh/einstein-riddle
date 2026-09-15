@@ -6,6 +6,8 @@ import { grade } from "./validate.js";
 import { generatePuzzle } from "./generate.js";
 import { createTextScale } from "./text-scale.js";
 import { buildAnswerFillQueue, shouldContinueReveal } from "./answer-fill.js";
+import { bindAuthUi, updateIntroAuthLabel } from "./auth.js";
+import { bindRankingUi, openCelebrateRegister } from "./rankings.js";
 
 const game = createGameState();
 const textScale = createTextScale({ storage: localStorage });
@@ -417,8 +419,14 @@ document.getElementById("btn-submit").onclick = () => {
   }
   game.stopTimer();
   if (result.solved) {
-    fb.textContent = `정답입니다! 소요 시간 ${formatMs(game.getElapsedMs())}`;
+    const ms = game.getElapsedMs();
+    fb.textContent = `정답입니다! 소요 시간 ${formatMs(ms)}`;
     fb.classList.add("ok");
+    openCelebrateRegister({
+      elapsedMs: ms,
+      difficulty: game.getDifficulty(),
+      formatMs,
+    });
   } else {
     fb.textContent = `틀린 칸 수 = ${result.wrongCount}`;
     fb.classList.add("bad");
@@ -434,6 +442,13 @@ document.getElementById("scale-down").onclick = () => {
   textScale.decrease();
   applyTextScale();
 };
+
+bindAuthUi();
+bindRankingUi({
+  getDifficulty: () => game.getDifficulty(),
+  formatMs,
+});
+updateIntroAuthLabel();
 
 applyTextScale();
 showScreen("intro");

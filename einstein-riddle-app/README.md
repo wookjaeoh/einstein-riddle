@@ -56,6 +56,25 @@ USB 폴더 복사·오프라인 수업도 가능. 인터넷은 `npx serve` 최�
 4. 카드 배치·제출 → 틀린 칸 수만 안내.
 5. 배율 100%·150%·200%와 「보통/어려움/매우 어려움」 전환을 시연.
 
+## 로그인·랭킹 (Vercel)
+
+공유 랭킹과 단순 PIN 로그인은 프로덕션(API)에서 동작합니다.
+
+환경 변수:
+
+| 변수 | 설명 |
+|------|------|
+| `LOGIN_PIN` | 숫자 4자리 수업용 암호 |
+| `KV_REST_API_URL` | Upstash / Vercel KV REST URL |
+| `KV_REST_API_TOKEN` | Upstash / Vercel KV REST 토큰 |
+
+Vercel 대시보드에서 Upstash Redis를 연결하면 `KV_*` 변수가 자동 주입될 수 있습니다.  
+(`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` 도 인식합니다.)
+
+- 인트로 「로그인」: 이름 · 구분(학생/교사/일반) · 4자리 암호
+- 정답 제출 시 랭킹 등록 여부 선택. 학생·교사는 학교명 입력 후 등록
+- 동일 이름·구분·학교·난이도는 **최고 기록 1건만** 유지
+
 ## 테스트 실행
 
 ```bash
