@@ -104,9 +104,12 @@ export default async function handler(req, res) {
 
     sendJson(res, 405, { error: "method_not_allowed" });
   } catch (error) {
-    const code = error?.code === "redis_misconfigured" ? 503 : 503;
-    sendJson(res, code, {
-      error: error?.code === "redis_misconfigured" ? "redis_misconfigured" : "redis_unavailable",
+    const detail = error?.code || error?.message || "redis_unavailable";
+    sendJson(res, 503, {
+      error: "redis_unavailable",
+      detail: String(detail).slice(0, 160),
+      hasUrl: Boolean(process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL),
+      hasToken: Boolean(process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN),
     });
   }
 }
