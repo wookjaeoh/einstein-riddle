@@ -46,6 +46,8 @@ async function assertDomContracts() {
   assert(html.includes('value="normal"'), "normal option exists");
   assert(html.includes('value="expert"'), "expert option exists");
   assert(html.includes('id="btn-hint"'), "hint button exists");
+  assert(html.includes('id="btn-reveal-answer"'), "reveal answer button exists");
+  assert(html.indexOf('id="btn-hint"') < html.indexOf('id="btn-reveal-answer"'), "reveal button after hint button");
   assert(html.includes('id="scale-up"'), "scale controls exist");
   assert(!html.includes('id="btn-teacher"'), "teacher button removed");
   assert(!mainSource.includes("./teacher.js"), "teacher import removed");

@@ -5,6 +5,7 @@ import { renderClues } from "./clues.js";
 import { grade } from "./validate.js";
 import { generatePuzzle } from "./generate.js";
 import { createTextScale } from "./text-scale.js";
+import { buildAnswerFillQueue } from "./answer-fill.js";
 
 const game = createGameState();
 const textScale = createTextScale({ storage: localStorage });
@@ -26,6 +27,19 @@ function formatMs(ms) {
   const m = Math.floor(s / 60);
   const r = s % 60;
   return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function updateScaleControls() {
@@ -113,7 +127,12 @@ function renderHints() {
   const puzzle = game.getPuzzle();
   const total = puzzle?.hints?.length ?? 0;
 
-  list.innerHTML = revealed.map((hint) => `<li>${hint.text}</li>`).join("");
+  list.innerHTML = revealed.map((hint) => {
+    const reasoning = Array.isArray(hint.reasoning) && hint.reasoning.length
+      ? `<div class="hint-reasoning">${hint.reasoning.map((line) => escapeHtml(line)).join("<br>")}</div>`
+      : "";
+    return `<li><div class="hint-text">${escapeHtml(hint.text)}</div>${reasoning}</li>`;
+  }).join("");
 
   if (!total) {
     status.textContent = "";
@@ -145,7 +164,17 @@ function renderAll() {
     },
   });
   renderHints();
-  document.getElementById("btn-undo").disabled = !game.canUndo();
+  updateLockedControls();
+}
+
+function updateLockedControls() {
+  const locked = game.isInteractionLocked();
+  document.getElementById("btn-undo").disabled = locked || !game.canUndo();
+  document.getElementById("btn-reset").disabled = locked;
+  document.getElementById("btn-submit").disabled = locked;
+  document.getElementById("btn-hint").disabled =
+    locked || document.getElementById("btn-hint").disabled;
+  document.getElementById("btn-reveal-answer").disabled = locked;
 }
 
 function resolveFrom(value, category) {
@@ -159,6 +188,7 @@ bindDragDrop({
   boardEl: document.getElementById("board"),
   poolEl: document.getElementById("pool"),
   onDrop({ value, category, to }) {
+    if (game.isInteractionLocked()) return;
     game.moveCard({ value, category, from: resolveFrom(value, category), to });
     renderAll();
   },
@@ -186,6 +216,74 @@ document.getElementById("btn-hint").onclick = () => {
   renderHints();
 };
 
+async function flyCardToSlot(step) {
+  const destination = document.querySelector(
+    `.slot[data-house-index="${step.houseIndex}"][data-category="${step.category}"]`,
+  );
+  if (!destination) return;
+
+  const source = document.querySelector(
+    `.card[data-value="${step.value}"][data-category="${step.category}"]`,
+  );
+  const targetRect = destination.getBoundingClientRect();
+  const sourceRect = source?.getBoundingClientRect() ?? {
+    left: targetRect.left,
+    top: Math.max(0, targetRect.top - 80),
+    width: targetRect.width,
+    height: targetRect.height,
+  };
+  const ghost = source?.cloneNode(true) ?? document.createElement("span");
+  if (!source) {
+    ghost.className = "card";
+    ghost.textContent = labelOf(step.value);
+  }
+  ghost.classList.add("answer-fly-ghost");
+  Object.assign(ghost.style, {
+    left: `${sourceRect.left}px`,
+    top: `${sourceRect.top}px`,
+    width: `${sourceRect.width}px`,
+    minHeight: `${sourceRect.height}px`,
+    margin: "0",
+  });
+  document.body.appendChild(ghost);
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  ghost.style.transform = `translate(${targetRect.left - sourceRect.left}px, ${targetRect.top - sourceRect.top}px)`;
+  ghost.style.opacity = "0.25";
+  await wait(400);
+  ghost.remove();
+}
+
+async function animateAnswerFill(queue) {
+  for (const step of queue) {
+    await flyCardToSlot(step);
+    game.setCellToAnswer(step.category, step.houseIndex);
+    renderBoard();
+    renderPool();
+    await wait(150);
+  }
+}
+
+document.getElementById("btn-reveal-answer").onclick = async () => {
+  if (game.isInteractionLocked()) return;
+  if (!confirm("포기하시겠습니까?")) return;
+  game.stopTimer();
+  game.lockInteraction();
+  updateLockedControls();
+  document.body.classList.add("interaction-locked");
+  const puzzle = game.getPuzzle();
+  const queue = buildAnswerFillQueue(
+    game.getPlacement(),
+    game.getAnswer(),
+    puzzle.categories,
+  );
+  await animateAnswerFill(queue);
+  game.applyFullAnswer();
+  renderAll();
+  const fb = document.getElementById("feedback");
+  fb.className = "feedback";
+  fb.textContent = "포기했습니다. 정답을 표시합니다.";
+};
+
 function startNewPuzzle() {
   const difficulty = document.getElementById("difficulty").value;
   updateHelpText(difficulty);
@@ -198,6 +296,7 @@ function startNewPuzzle() {
   requestAnimationFrame(() => {
     const puzzle = generatePuzzle(difficulty);
     game.loadPuzzle(puzzle);
+    document.body.classList.remove("interaction-locked");
     renderAll();
     button.disabled = false;
     feedback.className = "feedback";
