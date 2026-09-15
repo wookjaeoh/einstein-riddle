@@ -400,7 +400,7 @@ for (const id of ["easy", "normal", "hard", "expert"]) {
     solver.answerSatisfiesClues(puzzle.answer, puzzle.clues, puzzleSolverOptions(puzzle)),
     `${id} answer satisfies clues`,
   );
-  assert(Array.isArray(puzzle.hints) && puzzle.hints.length >= 6, `${id} has multiple hint bundles`);
+  assert(Array.isArray(puzzle.hints) && puzzle.hints.length >= 2, `${id} has multiple answer hints`);
   assert(puzzle.difficulty === id, `${id} difficulty field`);
   assert(
     validateHints({
@@ -419,28 +419,30 @@ const easy = generatePuzzle("easy", { timeLimitMs: 2500, random: seededRandom(7)
 assert(!easy.categories.includes("animal"), "easy excludes animal");
 assert(!("animal" in easy.answer), "easy answer excludes animal");
 assert(Object.values(easy.values).every((row) => row.length === 4), "easy selects four values");
-assert(easy.hints.length >= 6, "easy has at least two hint bundles");
-assert(easy.hints[0].stage === "direction", "first hint direction");
-assert(easy.hints[1].stage === "clues", "second hint clue guidance");
-assert(easy.hints[2].stage === "fact", "third hint fact");
+assert(easy.hints.length >= 2, "easy has at least two answer hints");
 assert(
-  easy.hints
-    .filter((h) => h.stage === "direction")
-    .every((h) => !/?쇱そ|?ㅻⅨ履?醫뚯슦|?놁쭛/.test(h.text)),
-  "direction hints avoid left/right position phrasing",
+  easy.hints.every((h) => h.stage === "fact"),
+  "all hints are answer facts from clue numbers",
 );
 assert(
-  easy.hints[1].meta?.clueIndices?.every(
-    (index) => Number.isInteger(index) && index >= 1 && index <= easy.clues.length,
+  easy.hints.every((h) => /?⑥꽌\s+\d+踰?.test(h.text) && h.text.includes("???듯빐")),
+  "hints only state which clue numbers yield the answer",
+);
+assert(
+  easy.hints.every(
+    (h) =>
+      h.meta?.clueIndices?.every(
+        (index) => Number.isInteger(index) && index >= 1 && index <= easy.clues.length,
+      ),
   ),
   "hint clue indices are valid",
 );
 assert(
-  easy.hints[2].meta?.val === easy.answer[easy.hints[2].meta.cat]?.[easy.hints[2].meta.houseIndex],
+  easy.hints[0].meta?.val === easy.answer[easy.hints[0].meta.cat]?.[easy.hints[0].meta.houseIndex],
   "hint fact matches answer placement",
 );
 assert(
-  easy.hints[1].text.includes("踰?) && !easy.hints[1].text.includes("2踰덇낵 5踰?),
+  easy.hints[0].text.includes("踰?) && !easy.hints[0].text.includes("2踰덇낵 5踰?),
   "hint clue numbers come from generated puzzle",
 );
 
@@ -543,7 +545,7 @@ assertFactCitationsRelate(fallbackReasoningPuzzle, "answer fallback reasoning");
 
 const hard = generatePuzzle("hard", { timeLimitMs: 2500, random: seededRandom(9) });
 const expert = generatePuzzle("expert", { timeLimitMs: 2500, random: seededRandom(13) });
-assert(hard.hints.length >= 9, "hard has at least three hint bundles");
+assert(hard.hints.length >= 3, "hard has at least three answer hints");
 assert(hard.meta.usedFallback || hard.clues.length === 15, "non-fallback hard has 15 clues");
 assert(
   expert.meta.usedFallback ||
@@ -598,14 +600,13 @@ assert(game.getPuzzle().hints.length === runtimePuzzle.hints.length, "getPuzzle 
 game.toggleClueRead(runtimePuzzle.clues[0].id);
 assert(game.isClueRead(runtimePuzzle.clues[0].id), "clue read toggles on");
 assert(game.getRevealedHints().length === 0, "clue toggle does not reveal hint");
-assert(game.revealNextHint().stage === "direction", "first reveal direction");
-assert(game.revealNextHint().stage === "clues", "second reveal clue guidance");
-assert(game.revealNextHint().stage === "fact", "third reveal fact");
-assert(game.getRevealedHints().length === 3, "three hints revealed");
+assert(game.revealNextHint().stage === "fact", "first reveal is clue-to-answer hint");
+assert(game.revealNextHint().stage === "fact", "second reveal is clue-to-answer hint");
+assert(game.getRevealedHints().length === 2, "two hints revealed");
 game.toggleClueRead(runtimePuzzle.clues[0].id);
 assert(!game.isClueRead(runtimePuzzle.clues[0].id), "clue read toggles off");
 game.resetPlacement({ keepTimer: true });
-assert(game.getRevealedHints().length === 3, "resetPlacement keeps revealed hints");
+assert(game.getRevealedHints().length === 2, "resetPlacement keeps revealed hints");
 game.loadPuzzle(runtimePuzzle);
 assert(game.getRevealedHints().length === 0, "loadPuzzle clears revealed hints");
 assert(!game.isClueRead(runtimePuzzle.clues[0].id), "loadPuzzle clears clue read");

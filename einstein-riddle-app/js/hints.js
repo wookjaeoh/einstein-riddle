@@ -1,14 +1,5 @@
 import { LABELS, labelOf } from "./puzzle-data.js";
 
-function hasBatchim(text) {
-  const code = text.charCodeAt(text.length - 1);
-  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
-}
-
-function particle(text, withBatchim, withoutBatchim) {
-  return `${text}${hasBatchim(text) ? withBatchim : withoutBatchim}`;
-}
-
 function categoryLabel(cat) {
   return LABELS[cat] ?? cat;
 }
@@ -22,36 +13,31 @@ function factTextForPlacement({ cat, val, houseIndex }) {
   const house = houseIndex + 1;
   const value = labelOf(val);
   if (cat === "color") {
-    return `${house}번 집은 ${value} 집으로 확정할 수 있습니다.`;
+    return `${house}번 집은 ${value} 집입니다.`;
   }
   if (cat === "nation") {
-    return `${house}번 집은 ${value} 사람이 사는 집으로 확정할 수 있습니다.`;
+    return `${house}번 집은 ${value} 사람이 삽니다.`;
   }
   if (cat === "drink") {
-    return `${house}번 집의 음료는 ${value}${hasBatchim(value) ? "으로" : "로"} 확정할 수 있습니다.`;
+    return `${house}번 집의 음료는 ${value}입니다.`;
   }
   if (cat === "food") {
-    return `${house}번 집의 음식은 ${value}${hasBatchim(value) ? "으로" : "로"} 확정할 수 있습니다.`;
+    return `${house}번 집의 음식은 ${value}입니다.`;
   }
-  return `${house}번 집의 ${categoryLabel(cat)}은 ${particle(value, "으로", "로")} 확정할 수 있습니다.`;
+  return `${house}번 집의 ${categoryLabel(cat)}은 ${value}입니다.`;
+}
+
+function answerHintText(firstNum, secondNum, factPlacement) {
+  const fact = factTextForPlacement(factPlacement);
+  if (firstNum && secondNum && firstNum !== secondNum) {
+    return `단서 ${firstNum}번과 ${secondNum}번을 통해 ${fact}`;
+  }
+  return `단서 ${firstNum ?? 1}번을 통해 ${fact}`;
 }
 
 function bundleCount(houseCount, categories) {
   if (houseCount <= 4 && categories.length <= 4) return 2;
   return 3;
-}
-
-function directionText(focusKind) {
-  if (focusKind === "atHouse") return "위치가 직접 정해진 단서부터 확인해 보세요.";
-  if (focusKind === "sameHouse") return "같은 집을 연결하는 단서부터 확인해 보세요.";
-  return "단서끼리 연결해 후보를 좁혀 보세요.";
-}
-
-function cluesText(firstNum, secondNum) {
-  if (firstNum && secondNum && firstNum !== secondNum) {
-    return `단서 ${firstNum}번과 ${secondNum}번을 함께 연결해 보세요.`;
-  }
-  return `단서 ${firstNum ?? 1}번을 다른 단서와 함께 연결해 보세요.`;
 }
 
 function clipQuote(text, max = 28) {
@@ -87,7 +73,7 @@ function clueRelationRank(clue, factPlacement, answer) {
   return 0;
 }
 
-function clueRelatesToFact(clue, factPlacement, answer) {
+export function clueRelatesToFact(clue, factPlacement, answer) {
   return clueRelationRank(clue, factPlacement, answer) > 0;
 }
 
@@ -99,7 +85,7 @@ function buildReasoning({ clues, clueIndices, anchor, factPlacement }) {
   const house = factPlacement.houseIndex + 1;
   const value = labelOf(factPlacement.val);
   const catLabel = categoryLabel(factPlacement.cat);
-  const primaryKind = primary?.kind ?? anchor.kind;
+  const primaryKind = primary?.kind ?? anchor?.kind;
 
   if (primaryKind === "atHouse") {
     steps.push(`① 단서 ${nums[0] ?? clueIndex(clues, anchor.id)}: 「${clipQuote(primary?.text ?? anchor.text)}」 → ${house}번 집의 ${catLabel}이(가) 직접 정해집니다.`);
@@ -107,7 +93,7 @@ function buildReasoning({ clues, clueIndices, anchor, factPlacement }) {
   } else if (primaryKind === "sameHouse") {
     steps.push(`① 단서 ${nums[0] ?? clueIndex(clues, anchor.id)}: 「${clipQuote(primary?.text ?? anchor.text)}」 → 두 속성이 같은 집입니다.`);
     if (secondary) {
-      steps.push(`② 단서 ${nums[1]}: 「${clipQuote(secondary.text)}」 → 위치·속성을 이어서 좁힙니다.`);
+      steps.push(`② 단서 ${nums[1]}: 「${clipQuote(secondary.text)}」 → 속성을 이어서 좁힙니다.`);
       steps.push(`③ 따라서 ${house}번 집 ${catLabel} = ${value}`);
     } else {
       steps.push(`② 정답 배치와 맞추면 ${house}번 집 ${catLabel} = ${value}`);
@@ -166,8 +152,6 @@ function factFromAnswer(answer, categories, houseCount, usedFacts, clues) {
 }
 
 function pickBundleAnchors(clues, count) {
-  // Prefer absolute / same-house clues. Avoid left/right (leftOf, nextTo) anchors
-  // so direction hints do not push learners to "check left and right positions".
   const preferred = clues.filter((c) => c.kind === "atHouse" || c.kind === "sameHouse");
   const fallback = clues.filter((c) => c.kind !== "atHouse" && c.kind !== "sameHouse");
   const ordered = [...preferred, ...fallback];
@@ -177,24 +161,19 @@ function pickBundleAnchors(clues, count) {
   for (const clue of ordered) {
     if (anchors.length >= count) break;
     if (usedIds.has(clue.id)) continue;
-    const focusKind =
-      clue.kind === "atHouse" || clue.kind === "sameHouse" ? clue.kind : "sameHouse";
-    anchors.push({ focusKind, anchor: clue });
+    anchors.push({ anchor: clue });
     usedIds.add(clue.id);
   }
 
   while (anchors.length < count && clues.length) {
     const clue = clues[anchors.length % clues.length];
-    const focusKind =
-      clue.kind === "atHouse" || clue.kind === "sameHouse" ? clue.kind : "sameHouse";
-    anchors.push({ focusKind, anchor: clue });
+    anchors.push({ anchor: clue });
   }
 
   return anchors.slice(0, count);
 }
 
 function pickCluePair(clues, anchor, factPlacement, answer, usedPairs) {
-  const anchorIndex = clueIndex(clues, anchor.id);
   const relatedIndices = clues
     .map((clue, index) => ({
       index: index + 1,
@@ -203,9 +182,11 @@ function pickCluePair(clues, anchor, factPlacement, answer, usedPairs) {
     .filter(({ rank }) => rank > 0)
     .sort((left, right) => right.rank - left.rank)
     .map(({ index }) => index);
-  const topRank = relatedIndices.length
-    ? clueRelationRank(clues[relatedIndices[0] - 1], factPlacement, answer)
-    : 0;
+
+  if (!relatedIndices.length) return [];
+
+  const anchorIndex = clueIndex(clues, anchor?.id);
+  const topRank = clueRelationRank(clues[relatedIndices[0] - 1], factPlacement, answer);
   const anchorRank = anchorIndex
     ? clueRelationRank(clues[anchorIndex - 1], factPlacement, answer)
     : 0;
@@ -223,57 +204,59 @@ function pickCluePair(clues, anchor, factPlacement, answer, usedPairs) {
     }
   }
 
-  const indices = [primaryIndex, partnerIndices[0]].filter(Boolean);
-  usedPairs.add([...indices].sort((a, b) => a - b).join(":"));
-  return indices;
+  // Prefer a two-clue path when a second related clue exists (even if pair reused).
+  if (partnerIndices[0]) {
+    const indices = [primaryIndex, partnerIndices[0]];
+    usedPairs.add([...indices].sort((a, b) => a - b).join(":"));
+    return indices;
+  }
+
+  usedPairs.add(String(primaryIndex));
+  return [primaryIndex];
 }
 
 /**
+ * Hints only state which clue number(s) yield a concrete answer fact.
  * @param {{ clues: object[], answer: object, houseCount: number, categories: string[] }} input
  */
 export function buildHints({ clues, answer, houseCount, categories }) {
   if (!Array.isArray(clues) || clues.length === 0) return [];
 
-  const bundles = pickBundleAnchors(clues, bundleCount(houseCount, categories));
+  const target = bundleCount(houseCount, categories);
   const hints = [];
   const usedFacts = new Set();
   const usedPairs = new Set();
+  const anchors = pickBundleAnchors(clues, Math.max(target * 2, target));
 
-  bundles.forEach(({ focusKind, anchor }, index) => {
-    const bundle = index + 1;
+  for (const { anchor } of anchors) {
+    if (hints.length >= target) break;
+
     let factPlacement = factFromClue(anchor, answer);
     if (!factPlacement) {
       factPlacement = factFromAnswer(answer, categories, houseCount, usedFacts, clues);
     } else {
-      usedFacts.add(`${factPlacement.cat}:${factPlacement.val}:${factPlacement.houseIndex}`);
+      const key = `${factPlacement.cat}:${factPlacement.val}:${factPlacement.houseIndex}`;
+      if (usedFacts.has(key)) {
+        factPlacement = factFromAnswer(answer, categories, houseCount, usedFacts, clues);
+      } else {
+        usedFacts.add(key);
+      }
     }
-    const [firstNum, secondNum] = pickCluePair(
-      clues,
-      anchor,
-      factPlacement,
-      answer,
-      usedPairs,
-    );
 
+    const indices = pickCluePair(clues, anchor, factPlacement, answer, usedPairs).filter(Boolean);
+    if (!indices.length) continue;
+    if (!indices.every((index) => clueRelatesToFact(clues[index - 1], factPlacement, answer))) {
+      continue;
+    }
+
+    const bundle = hints.length + 1;
     hints.push({
-      id: `h${bundle}-direction`,
-      stage: "direction",
-      text: directionText(focusKind),
-      meta: { bundle, focusKind },
-    });
-    hints.push({
-      id: `h${bundle}-clues`,
-      stage: "clues",
-      text: cluesText(firstNum, secondNum),
-      meta: { bundle, clueIndices: [firstNum, secondNum].filter(Boolean) },
-    });
-    hints.push({
-      id: `h${bundle}-fact`,
+      id: `h${bundle}-answer`,
       stage: "fact",
-      text: factTextForPlacement(factPlacement),
+      text: answerHintText(indices[0], indices[1], factPlacement),
       reasoning: buildReasoning({
         clues,
-        clueIndices: [firstNum, secondNum].filter(Boolean),
+        clueIndices: indices,
         anchor,
         factPlacement,
       }),
@@ -282,10 +265,10 @@ export function buildHints({ clues, answer, houseCount, categories }) {
         cat: factPlacement.cat,
         val: factPlacement.val,
         houseIndex: factPlacement.houseIndex,
-        clueIndices: [firstNum, secondNum].filter(Boolean),
+        clueIndices: indices,
       },
     });
-  });
+  }
 
   return hints;
 }
@@ -294,7 +277,7 @@ export function buildHints({ clues, answer, houseCount, categories }) {
  * @param {{ hints: object[], clues: object[], answer: object, houseCount: number, categories: string[] }} input
  */
 export function validateHints({ hints, clues, answer, houseCount, categories }) {
-  if (!Array.isArray(hints) || hints.length < 6) return false;
+  if (!Array.isArray(hints) || hints.length < 2) return false;
   if (!Array.isArray(clues) || !clues.length) return false;
   if (!answer || typeof answer !== "object") return false;
 
@@ -302,37 +285,31 @@ export function validateHints({ hints, clues, answer, houseCount, categories }) 
   for (const hint of hints) {
     if (!hint?.id || ids.has(hint.id)) return false;
     ids.add(hint.id);
-  }
+    if (hint.stage !== "fact") return false;
+    if (!/단서\s+\d+번/.test(hint.text ?? "")) return false;
 
-  const byBundle = new Map();
-  for (const hint of hints) {
-    const bundle = hint.meta?.bundle;
-    if (!Number.isInteger(bundle)) return false;
-    if (!byBundle.has(bundle)) byBundle.set(bundle, []);
-    byBundle.get(bundle).push(hint);
-  }
-  if (byBundle.size < 2) return false;
-
-  for (const [, group] of byBundle) {
-    if (group.length !== 3) return false;
-    const stages = group.map((hint) => hint.stage);
-    if (stages[0] !== "direction" || stages[1] !== "clues" || stages[2] !== "fact") return false;
-
-    const cluesHint = group.find((hint) => hint.stage === "clues");
-    const indices = cluesHint?.meta?.clueIndices;
+    const indices = hint.meta?.clueIndices;
     if (!Array.isArray(indices) || !indices.length) return false;
     if (indices.some((index) => !Number.isInteger(index) || index < 1 || index > clues.length)) {
       return false;
     }
+    if (
+      !indices.every((index) =>
+        clueRelatesToFact(clues[index - 1], hint.meta, answer),
+      )
+    ) {
+      return false;
+    }
 
-    const factHint = group.find((hint) => hint.stage === "fact");
-    const { cat, val, houseIndex } = factHint?.meta ?? {};
+    const { cat, val, houseIndex } = hint.meta ?? {};
     if (!categories.includes(cat)) return false;
     if (!Number.isInteger(houseIndex) || houseIndex < 0 || houseIndex >= houseCount) return false;
     if (answer[cat]?.[houseIndex] !== val) return false;
-    if (!Array.isArray(factHint.reasoning) || factHint.reasoning.length < 2 || factHint.reasoning.length > 3) return false;
-    if (factHint.reasoning.some((line) => typeof line !== "string" || !line.trim())) return false;
-    if (!factHint.reasoning.some((line) => line.includes("「") && line.includes("」"))) return false;
+    if (!Array.isArray(hint.reasoning) || hint.reasoning.length < 2 || hint.reasoning.length > 3) {
+      return false;
+    }
+    if (hint.reasoning.some((line) => typeof line !== "string" || !line.trim())) return false;
+    if (!hint.reasoning.some((line) => line.includes("「") && line.includes("」"))) return false;
   }
 
   return true;
