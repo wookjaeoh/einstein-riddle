@@ -121,6 +121,44 @@ export function labelOf(id) {
   return LABELS[id] ?? id;
 }
 
+export const ICONS = {
+  yellow: "🟡",
+  blue: "🔵",
+  red: "🔴",
+  green: "🟢",
+  white: "⚪",
+  norway: "🇳🇴",
+  denmark: "🇩🇰",
+  england: "🇬🇧",
+  germany: "🇩🇪",
+  sweden: "🇸🇪",
+  water: "💧",
+  tea: "🍵",
+  milk: "🥛",
+  coffee: "☕",
+  beer: "🍺",
+  gimbap: "🍙",
+  ramen: "🍜",
+  chicken: "🍗",
+  burger: "🍔",
+  pizza: "🍕",
+  cat: "🐱",
+  horse: "🐴",
+  bird: "🐦",
+  fish: "🐟",
+  dog: "🐕",
+};
+
+export function iconOf(id) {
+  return ICONS[id] ?? "";
+}
+
+export function formatCardLabel(id) {
+  const icon = iconOf(id);
+  const label = labelOf(id);
+  return icon ? `${icon} ${label}` : label;
+}
+
 function sliceProfileValues(houseCount, categories) {
   return Object.fromEntries(
     categories.map((cat) => [cat, VALUES[cat].slice(0, houseCount)]),

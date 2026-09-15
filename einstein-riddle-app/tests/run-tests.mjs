@@ -6,6 +6,10 @@ import {
   HOUSES,
   DIFFICULTY_PROFILES,
   PROFILE_FALLBACKS,
+  ICONS,
+  iconOf,
+  formatCardLabel,
+  labelOf,
 } from "../js/puzzle-data.js";
 import * as solver from "../js/solver.js";
 import { generatePuzzle } from "../js/generate.js";
@@ -637,6 +641,20 @@ const fullGame = createGameState();
 fullGame.loadPuzzle(fillPuzzle);
 fullGame.applyFullAnswer();
 assert(JSON.stringify(fullGame.getPlacement()) === JSON.stringify(fillPuzzle.answer), "applyFullAnswer matches answer");
+
+for (const cat of Object.keys(VALUES)) {
+  for (const id of VALUES[cat]) {
+    assert(Boolean(iconOf(id)), `iconOf(${id}) non-empty`);
+    assert(ICONS[id] === iconOf(id), `ICONS[${id}] matches iconOf`);
+    assert(formatCardLabel(id).includes(labelOf(id)), `formatCardLabel includes Korean for ${id}`);
+    assert(formatCardLabel(id).includes(iconOf(id)), `formatCardLabel includes icon for ${id}`);
+  }
+}
+assert(formatCardLabel("england").includes("🇬🇧"), "england flag");
+assert(formatCardLabel("england").includes("영국"), "england Korean");
+assert(formatCardLabel("dog").includes("🐕"), "dog emoji");
+assert(formatCardLabel("dog").includes("개"), "dog Korean");
+assert(!Object.prototype.hasOwnProperty.call(ICONS, "color"), "category keys are not in ICONS");
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exitCode = 1;
