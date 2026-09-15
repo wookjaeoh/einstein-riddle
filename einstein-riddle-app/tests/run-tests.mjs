@@ -53,6 +53,10 @@ async function assertDomContracts() {
   assert(html.includes('id="btn-reveal-answer"'), "reveal answer button exists");
   assert(html.indexOf('id="btn-hint"') < html.indexOf('id="btn-reveal-answer"'), "reveal button after hint button");
   assert(html.includes('id="scale-up"'), "scale controls exist");
+  assert(html.includes('id="screen-intro"'), "intro screen exists");
+  assert(html.includes('id="screen-howto"'), "howto screen exists");
+  assert(html.includes('id="btn-intro-start"'), "intro start button exists");
+  assert(html.includes('id="btn-howto-start"'), "howto start button exists");
   assert(!html.includes('id="btn-teacher"'), "teacher button removed");
   assert(!mainSource.includes("./teacher.js"), "teacher import removed");
 }

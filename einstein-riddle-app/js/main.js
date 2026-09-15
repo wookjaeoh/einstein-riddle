@@ -332,7 +332,7 @@ function askGiveUpConfirm() {
   });
 }
 
-function startNewPuzzle() {
+function startNewPuzzle({ autoStartTimer = false } = {}) {
   revealGeneration += 1;
   const difficulty = document.getElementById("difficulty").value;
   updateHelpText(difficulty);
@@ -352,12 +352,48 @@ function startNewPuzzle() {
     feedback.textContent = puzzle.meta.usedFallback
       ? "기본 문제로 시작합니다."
       : `새 문제 (단서 ${puzzle.meta.clueCount}개)`;
+    if (autoStartTimer) {
+      game.ensureTimerStarted();
+      document.getElementById("timer").textContent = formatMs(game.getElapsedMs());
+    }
   });
 }
 
+function showScreen(name) {
+  const intro = document.getElementById("screen-intro");
+  const howto = document.getElementById("screen-howto");
+  const gameScreen = document.getElementById("screen-game");
+  const scale = document.getElementById("scale-controls");
+  const isIntro = name === "intro";
+  const isHowto = name === "howto";
+  const isGame = name === "game";
+
+  intro.classList.toggle("hidden", !isIntro);
+  intro.toggleAttribute("hidden", !isIntro);
+  howto.classList.toggle("hidden", !isHowto);
+  howto.toggleAttribute("hidden", !isHowto);
+  gameScreen.classList.toggle("hidden", !isGame);
+  gameScreen.toggleAttribute("hidden", !isGame);
+  scale.classList.toggle("hidden", !isGame);
+  scale.toggleAttribute("hidden", !isGame);
+
+  document.body.classList.toggle("on-intro", isIntro);
+  document.body.classList.toggle("on-howto", isHowto);
+  document.body.classList.toggle("on-game", isGame);
+}
+
+document.getElementById("btn-intro-start").onclick = () => {
+  showScreen("howto");
+};
+
+document.getElementById("btn-howto-start").onclick = () => {
+  showScreen("game");
+  startNewPuzzle({ autoStartTimer: true });
+};
+
 document.getElementById("btn-new").onclick = () => {
   if (!confirm("새 문제를 만들까요? 진행 중 배치는 사라집니다.")) return;
-  startNewPuzzle();
+  startNewPuzzle({ autoStartTimer: true });
 };
 
 document.getElementById("difficulty").onchange = () => {
@@ -366,7 +402,7 @@ document.getElementById("difficulty").onchange = () => {
     select.value = game.getDifficulty();
     return;
   }
-  startNewPuzzle();
+  startNewPuzzle({ autoStartTimer: true });
 };
 
 document.getElementById("btn-submit").onclick = () => {
@@ -400,4 +436,4 @@ document.getElementById("scale-down").onclick = () => {
 };
 
 applyTextScale();
-startNewPuzzle();
+showScreen("intro");
