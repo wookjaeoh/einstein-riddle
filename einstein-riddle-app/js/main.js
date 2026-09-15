@@ -388,9 +388,18 @@ document.getElementById("btn-intro-start").onclick = () => {
   showScreen("howto");
 };
 
+document.getElementById("btn-howto-back").onclick = () => {
+  showScreen("intro");
+};
+
 document.getElementById("btn-howto-start").onclick = () => {
   showScreen("game");
   startNewPuzzle({ autoStartTimer: true });
+};
+
+document.getElementById("btn-game-back").onclick = () => {
+  game.stopTimer();
+  showScreen("howto");
 };
 
 document.getElementById("btn-new").onclick = () => {

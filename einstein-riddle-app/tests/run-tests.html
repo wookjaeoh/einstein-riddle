@@ -66,6 +66,8 @@ async function assertDomContracts() {
   assert(html.includes('id="screen-howto"'), "howto screen exists");
   assert(html.includes('id="btn-intro-start"'), "intro start button exists");
   assert(html.includes('id="btn-howto-start"'), "howto start button exists");
+  assert(html.includes('id="btn-howto-back"'), "howto back button exists");
+  assert(html.includes('id="btn-game-back"'), "game back button exists");
   assert(html.includes('id="btn-intro-login"'), "intro login button");
   assert(html.includes('id="login-modal"'), "login modal");
   assert(html.includes('id="login-name"'), "login name field");

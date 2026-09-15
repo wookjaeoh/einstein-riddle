@@ -63,9 +63,35 @@ body {
   gap: 1rem;
   padding: 1rem 1.25rem 0.5rem;
 }
-.top-bar-main { min-width: 0; }
+.top-bar-main { min-width: 0; flex: 1; }
 .top-bar h1 { margin: 0; font-size: clamp(1.4rem, 3vw, 2rem); letter-spacing: -0.02em; }
 .tagline { margin: 0.25rem 0 0; color: var(--text-muted); }
+
+.btn-back {
+  font: inherit;
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid rgba(201, 218, 240, 0.35);
+  border-radius: 0.55rem;
+  background: rgba(7, 21, 37, 0.45);
+  color: #d7e6f8;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.btn-back:hover {
+  background: rgba(255, 209, 154, 0.14);
+  border-color: rgba(255, 209, 154, 0.55);
+  color: #ffd19a;
+}
+
+.btn-back--splash {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 3;
+}
 .creator-credit {
   margin: 0.15rem 0 0;
   flex-shrink: 0;
