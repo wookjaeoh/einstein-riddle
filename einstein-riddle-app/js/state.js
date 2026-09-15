@@ -44,6 +44,7 @@ export function createGameState() {
   let timerStart = null;
   let timerAccum = 0;
   let timerRunning = false;
+  let interactionLocked = false;
 
   function resetTimer() {
     timerStart = null;
@@ -66,6 +67,7 @@ export function createGameState() {
     history = [];
     readClueIds = new Set();
     revealedHintCount = 0;
+    interactionLocked = false;
     resetTimer();
   }
 
@@ -90,6 +92,7 @@ export function createGameState() {
   }
 
   function resetPlacement({ keepTimer = false } = {}) {
+    if (interactionLocked) return;
     placement = emptyPlacement(categories, houseCount);
     history = [];
     if (!keepTimer) resetTimer();
@@ -127,7 +130,32 @@ export function createGameState() {
     return -1;
   }
 
+  function isInteractionLocked() {
+    return interactionLocked;
+  }
+
+  function lockInteraction() {
+    interactionLocked = true;
+  }
+
+  function setCellToAnswer(category, houseIndex) {
+    if (!answer) return false;
+    if (!categories.includes(category)) return false;
+    if (houseIndex < 0 || houseIndex >= houseCount) return false;
+    const value = answer[category]?.[houseIndex];
+    if (value == null) return false;
+    placement[category][houseIndex] = value;
+    return true;
+  }
+
+  function applyFullAnswer() {
+    if (!answer) return;
+    placement = clonePlacement(answer, categories);
+    history = [];
+  }
+
   function moveCard({ value, category, from, to }) {
+    if (interactionLocked) return false;
     if (!answer) return false;
     if (!categories.includes(category)) return false;
     if (!values[category]?.includes(value)) return false;
@@ -187,11 +215,13 @@ export function createGameState() {
   }
 
   function undo() {
+    if (interactionLocked) return;
     if (!history.length) return;
     placement = history.pop();
   }
 
   function toggleClueRead(id) {
+    if (interactionLocked) return;
     if (readClueIds.has(id)) readClueIds.delete(id);
     else readClueIds.add(id);
   }
@@ -205,6 +235,7 @@ export function createGameState() {
   }
 
   function revealNextHint() {
+    if (interactionLocked) return null;
     if (revealedHintCount >= hints.length) return null;
     const hint = hints[revealedHintCount];
     revealedHintCount += 1;
@@ -230,5 +261,9 @@ export function createGameState() {
     isClueRead,
     revealNextHint,
     getRevealedHints,
+    isInteractionLocked,
+    lockInteraction,
+    setCellToAnswer,
+    applyFullAnswer,
   };
 }
