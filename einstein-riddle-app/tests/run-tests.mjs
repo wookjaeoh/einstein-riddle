@@ -65,6 +65,8 @@ function seededRandom(seed) {
 
 function testDragCancelCleanup() {
   let dropped = false;
+  let locked = false;
+  let cloneCount = 0;
   const cardClasses = new Set();
   const poolClasses = new Set();
   const cardListeners = {};
@@ -89,6 +91,7 @@ function testDragCancelCleanup() {
       return selector === ".card" ? this : null;
     },
     cloneNode() {
+      cloneCount++;
       ghostNode = ghost;
       return ghost;
     },
@@ -146,6 +149,7 @@ function testDragCancelCleanup() {
     rootEl,
     targetDocument: fakeDocument,
     targetWindow: fakeWindow,
+    isLocked: () => locked,
   });
   dragDrop.bind();
 
@@ -183,6 +187,21 @@ function testDragCancelCleanup() {
   assert(ghostRemoved, "lostpointercapture calls ghost.remove");
   assert(!cardClasses.has("dragging"), "lostpointercapture clears dragging class");
   assert(!dropped, "lostpointercapture does not invoke onDrop");
+
+  locked = true;
+  const clonesBeforeLockedPointerDown = cloneCount;
+  rootEl.listeners.pointerdown({
+    preventDefault() {},
+    target: card,
+    clientX: 50,
+    clientY: 60,
+    pointerId: 3,
+  });
+  fakeWindow.listeners.pointerup({ pointerId: 3, clientX: 50, clientY: 60 });
+  assert(!dragDrop.isDragging(), "locked pointerdown does not start drag");
+  assert(!dragDrop.hasGhost(), "locked pointerdown does not create ghost");
+  assert(cloneCount === clonesBeforeLockedPointerDown, "locked pointerdown does not clone card");
+  assert(!dropped, "locked pointer path does not invoke onDrop");
 }
 
 const expectedProfiles = {
@@ -327,6 +346,15 @@ function clueRelatesToFact(clue, factMeta, answer) {
   );
 }
 
+function clueMentionsFactValue(clue, factMeta) {
+  const placementValues = [
+    clue?.cat && clue?.val ? clue.val : null,
+    clue?.a?.val,
+    clue?.b?.val,
+  ].filter(Boolean);
+  return clue?.values?.includes(factMeta.val) || placementValues.includes(factMeta.val);
+}
+
 function assertFactCitationsRelate(puzzle, label) {
   for (const hint of puzzle.hints.filter((candidate) => candidate.stage === "fact")) {
     const citedNumbers = hint.reasoning.flatMap((line) =>
@@ -338,6 +366,12 @@ function assertFactCitationsRelate(puzzle, label) {
         clueRelatesToFact(puzzle.clues[number - 1], hint.meta, puzzle.answer),
       ),
       `${label} ${hint.id} cites only clues related to its fact`,
+    );
+    const directCluesExist = puzzle.clues.some((clue) => clueMentionsFactValue(clue, hint.meta));
+    assert(
+      !directCluesExist ||
+        citedNumbers.some((number) => clueMentionsFactValue(puzzle.clues[number - 1], hint.meta)),
+      `${label} ${hint.id} cites a clue that directly mentions its fact value when available`,
     );
   }
 }

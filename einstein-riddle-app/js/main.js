@@ -188,6 +188,7 @@ function resolveFrom(value, category) {
 bindDragDrop({
   boardEl: document.getElementById("board"),
   poolEl: document.getElementById("pool"),
+  isLocked: () => game.isInteractionLocked(),
   onDrop({ value, category, to }) {
     if (game.isInteractionLocked()) return;
     game.moveCard({ value, category, from: resolveFrom(value, category), to });

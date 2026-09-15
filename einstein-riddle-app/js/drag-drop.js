@@ -5,6 +5,7 @@ export function createDragDrop({
   rootEl,
   targetDocument = document,
   targetWindow = window,
+  isLocked = () => false,
 }) {
   let dragging = null; // { value, category, el, pointerId }
   let ghost = null;
@@ -59,6 +60,7 @@ export function createDragDrop({
   }
 
   function onPointerDown(e) {
+    if (isLocked()) return;
     const card = e.target.closest(".card");
     if (!card || !card.dataset.value) return;
     e.preventDefault();
@@ -122,11 +124,12 @@ export function createDragDrop({
   };
 }
 
-export function bindDragDrop({ boardEl, poolEl, onDrop }) {
+export function bindDragDrop({ boardEl, poolEl, onDrop, isLocked }) {
   const controller = createDragDrop({
     boardEl,
     poolEl,
     onDrop,
+    isLocked,
     rootEl: document.getElementById("app"),
   });
   controller.bind();

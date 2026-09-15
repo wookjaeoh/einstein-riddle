@@ -69,16 +69,27 @@ function cluePlacements(clue) {
   ].filter(Boolean);
 }
 
-function clueRelatesToFact(clue, factPlacement, answer) {
-  const houseNumber = factPlacement.houseIndex + 1;
+function clueDirectlyMentionsFact(clue, factPlacement) {
   return (
-    cluePlacements(clue).some(
-      ({ cat, val }) =>
-        val === factPlacement.val || answer[cat]?.indexOf(val) === factPlacement.houseIndex,
-    ) ||
-    clue?.houseIndex === factPlacement.houseIndex ||
-    clue?.houseIds?.includes(houseNumber)
+    clue?.values?.includes(factPlacement.val) ||
+    cluePlacements(clue).some(({ val }) => val === factPlacement.val)
   );
+}
+
+function clueRelationRank(clue, factPlacement, answer) {
+  if (clueDirectlyMentionsFact(clue, factPlacement)) return 2;
+  if (
+    cluePlacements(clue).some(
+      ({ cat, val }) => answer[cat]?.indexOf(val) === factPlacement.houseIndex,
+    )
+  ) {
+    return 1;
+  }
+  return 0;
+}
+
+function clueRelatesToFact(clue, factPlacement, answer) {
+  return clueRelationRank(clue, factPlacement, answer) > 0;
 }
 
 function buildReasoning({ clues, clueIndices, anchor, factPlacement }) {
@@ -138,9 +149,12 @@ function factFromAnswer(answer, categories, houseCount, usedFacts, clues) {
       const key = `${cat}:${val}:${houseIndex}`;
       if (usedFacts.has(key)) continue;
       const candidate = { cat, val, houseIndex };
-      const supportCount = clues.filter((clue) => clueRelatesToFact(clue, candidate, answer)).length;
-      if (!best || supportCount > best.supportCount) {
-        best = { ...candidate, key, supportCount };
+      const supportScore = clues.reduce(
+        (score, clue) => score + clueRelationRank(clue, candidate, answer),
+        0,
+      );
+      if (!best || supportScore > best.supportScore) {
+        best = { ...candidate, key, supportScore };
       }
     }
   }
@@ -190,9 +204,23 @@ function pickBundleAnchors(clues, count) {
 function pickCluePair(clues, anchor, factPlacement, answer, usedPairs) {
   const anchorIndex = clueIndex(clues, anchor.id);
   const relatedIndices = clues
-    .map((clue, index) => (clueRelatesToFact(clue, factPlacement, answer) ? index + 1 : null))
-    .filter(Boolean);
-  const primaryIndex = relatedIndices.includes(anchorIndex) ? anchorIndex : relatedIndices[0];
+    .map((clue, index) => ({
+      index: index + 1,
+      rank: clueRelationRank(clue, factPlacement, answer),
+    }))
+    .filter(({ rank }) => rank > 0)
+    .sort((left, right) => right.rank - left.rank)
+    .map(({ index }) => index);
+  const topRank = relatedIndices.length
+    ? clueRelationRank(clues[relatedIndices[0] - 1], factPlacement, answer)
+    : 0;
+  const anchorRank = anchorIndex
+    ? clueRelationRank(clues[anchorIndex - 1], factPlacement, answer)
+    : 0;
+  const primaryIndex =
+    anchorRank === topRank && relatedIndices.includes(anchorIndex)
+      ? anchorIndex
+      : relatedIndices[0];
   const partnerIndices = relatedIndices.filter((index) => index !== primaryIndex);
 
   for (const partnerIndex of partnerIndices) {
