@@ -1,3 +1,7 @@
+export function shouldContinueReveal(session, currentGeneration) {
+  return session === currentGeneration;
+}
+
 export function buildAnswerFillQueue(placement, answer, categories) {
   const queue = [];
   for (const category of categories) {

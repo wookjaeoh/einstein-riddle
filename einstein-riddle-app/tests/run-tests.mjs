@@ -11,7 +11,7 @@ import * as solver from "../js/solver.js";
 import { generatePuzzle } from "../js/generate.js";
 import { buildHints, validateHints } from "../js/hints.js";
 import { createGameState } from "../js/state.js";
-import { buildAnswerFillQueue } from "../js/answer-fill.js";
+import { buildAnswerFillQueue, shouldContinueReveal } from "../js/answer-fill.js";
 import { createTextScale } from "../js/text-scale.js";
 import { renderClues } from "../js/clues.js";
 import { createDragDrop } from "../js/drag-drop.js";
@@ -551,6 +551,9 @@ place.color[0] = fillPuzzle.answer.color[0];
 const queue = buildAnswerFillQueue(place, fillPuzzle.answer, fillPuzzle.categories);
 assert(!queue.some((q) => q.category === "color" && q.houseIndex === 0), "correct cell omitted from fill queue");
 assert(queue.length === fillPuzzle.categories.length * fillPuzzle.houseCount - 1, "queue covers all non-correct cells");
+
+assert(shouldContinueReveal(1, 1), "shouldContinueReveal true when session matches");
+assert(!shouldContinueReveal(1, 2), "shouldContinueReveal false when generation bumped");
 
 fillGame.lockInteraction();
 assert(fillGame.isInteractionLocked(), "lockInteraction sets locked");

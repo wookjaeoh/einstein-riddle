@@ -5,10 +5,11 @@ import { renderClues } from "./clues.js";
 import { grade } from "./validate.js";
 import { generatePuzzle } from "./generate.js";
 import { createTextScale } from "./text-scale.js";
-import { buildAnswerFillQueue } from "./answer-fill.js";
+import { buildAnswerFillQueue, shouldContinueReveal } from "./answer-fill.js";
 
 const game = createGameState();
 const textScale = createTextScale({ storage: localStorage });
+let revealGeneration = 0;
 
 const HELP_TEXT = {
   easy: "카드를 집의 칸으로 끌어다 놓고, 단서를 눌러 읽음 표시를 하세요. 힌트는 아래 버튼으로 확인할 수 있습니다.",
@@ -253,14 +254,18 @@ async function flyCardToSlot(step) {
   ghost.remove();
 }
 
-async function animateAnswerFill(queue) {
+async function animateAnswerFill(queue, session) {
   for (const step of queue) {
+    if (!shouldContinueReveal(session, revealGeneration)) return false;
     await flyCardToSlot(step);
+    if (!shouldContinueReveal(session, revealGeneration)) return false;
     game.setCellToAnswer(step.category, step.houseIndex);
     renderBoard();
     renderPool();
     await wait(150);
+    if (!shouldContinueReveal(session, revealGeneration)) return false;
   }
+  return true;
 }
 
 document.getElementById("btn-reveal-answer").onclick = async () => {
@@ -271,12 +276,15 @@ document.getElementById("btn-reveal-answer").onclick = async () => {
   updateLockedControls();
   document.body.classList.add("interaction-locked");
   const puzzle = game.getPuzzle();
+  const session = ++revealGeneration;
   const queue = buildAnswerFillQueue(
     game.getPlacement(),
     game.getAnswer(),
     puzzle.categories,
   );
-  await animateAnswerFill(queue);
+  const completed = await animateAnswerFill(queue, session);
+  if (!shouldContinueReveal(session, revealGeneration)) return;
+  if (!completed) return;
   game.applyFullAnswer();
   renderAll();
   const fb = document.getElementById("feedback");
@@ -285,6 +293,7 @@ document.getElementById("btn-reveal-answer").onclick = async () => {
 };
 
 function startNewPuzzle() {
+  revealGeneration += 1;
   const difficulty = document.getElementById("difficulty").value;
   updateHelpText(difficulty);
   const button = document.getElementById("btn-new");
