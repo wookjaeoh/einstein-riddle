@@ -144,7 +144,11 @@ export function createGameState() {
     if (houseIndex < 0 || houseIndex >= houseCount) return false;
     const value = answer[category]?.[houseIndex];
     if (value == null) return false;
-    placement[category][houseIndex] = value;
+    const row = placement[category];
+    for (let i = 0; i < row.length; i++) {
+      if (i !== houseIndex && row[i] === value) row[i] = null;
+    }
+    row[houseIndex] = value;
     return true;
   }
 

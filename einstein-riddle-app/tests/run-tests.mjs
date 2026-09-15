@@ -552,9 +552,8 @@ assert(queue.length === fillPuzzle.categories.length * fillPuzzle.houseCount - 1
 
 fillGame.lockInteraction();
 assert(fillGame.isInteractionLocked(), "lockInteraction sets locked");
-const beforeMs = fillGame.getElapsedMs();
 fillGame.ensureTimerStarted();
-assert(!fillGame.isTimerRunning() || true, "timer may need stop on reveal — tested with reveal path");
+assert(fillGame.isTimerRunning(), "ensureTimerStarted runs timer");
 fillGame.stopTimer();
 assert(!fillGame.isTimerRunning(), "stopTimer clears running");
 assert(fillGame.moveCard({
@@ -564,11 +563,41 @@ assert(fillGame.moveCard({
   to: { type: "slot", category: "color", houseIndex: 1 },
 }) === false, "moveCard blocked when locked");
 
+const lockedPlacement = fillGame.getPlacement();
+fillGame.undo();
+assert(JSON.stringify(fillGame.getPlacement()) === JSON.stringify(lockedPlacement), "undo no-op when locked");
+fillGame.resetPlacement();
+assert(JSON.stringify(fillGame.getPlacement()) === JSON.stringify(lockedPlacement), "resetPlacement no-op when locked");
+const clueId = fillPuzzle.clues[0]?.id;
+if (clueId) {
+  fillGame.toggleClueRead(clueId);
+  assert(!fillGame.isClueRead(clueId), "toggleClueRead no-op when locked");
+}
+assert(fillGame.revealNextHint() === null, "revealNextHint null when locked");
+
 fillGame.loadPuzzle(fillPuzzle);
 assert(!fillGame.isInteractionLocked(), "loadPuzzle clears lock");
 
 assert(fillGame.setCellToAnswer("color", 0) === true, "setCellToAnswer writes answer cell");
 assert(fillGame.getPlacement().color[0] === fillPuzzle.answer.color[0], "cell matches answer");
+
+const dupGame = createGameState();
+dupGame.loadPuzzle(fillPuzzle);
+dupGame.moveCard({
+  value: fillPuzzle.answer.color[0],
+  category: "color",
+  from: { type: "pool" },
+  to: { type: "slot", category: "color", houseIndex: 1 },
+});
+assert(dupGame.setCellToAnswer("color", 0) === true, "setCellToAnswer clears duplicate");
+const dupPlace = dupGame.getPlacement();
+assert(dupPlace.color[0] === fillPuzzle.answer.color[0], "setCellToAnswer places value in target cell");
+assert(dupPlace.color[1] === null, "setCellToAnswer clears duplicate in same category");
+
+const fullGame = createGameState();
+fullGame.loadPuzzle(fillPuzzle);
+fullGame.applyFullAnswer();
+assert(JSON.stringify(fullGame.getPlacement()) === JSON.stringify(fillPuzzle.answer), "applyFullAnswer matches answer");
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exitCode = 1;
