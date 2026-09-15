@@ -1,13 +1,13 @@
 :root {
-  --page-bg: #e8f5d8;
-  --panel-bg: rgba(255, 255, 255, 0.82);
-  --panel-alt: #f3fbe8;
-  --border: #b7d49a;
-  --text: #1e3320;
-  --text-muted: #4d6b45;
-  --accent: #5a9e3a;
-  --success: #2f8f55;
-  --error: #c94a5a;
+  --page-bg: #0a1f12;
+  --panel-bg: #12301c;
+  --panel-alt: #183d24;
+  --border: #2f5c3a;
+  --text: #e8f7ea;
+  --text-muted: #9fc5a8;
+  --accent: #6fd98a;
+  --success: #5de0a3;
+  --error: #ff7b8a;
   --text-scale: 1.5;
   --house-count: 5;
 }
@@ -23,10 +23,10 @@ body {
   font-family: "Pretendard", "Noto Sans KR", sans-serif;
   background-color: var(--page-bg);
   background-image:
-    radial-gradient(ellipse 80% 55% at 15% 10%, rgba(170, 230, 100, 0.55), transparent 55%),
-    radial-gradient(ellipse 70% 50% at 90% 20%, rgba(120, 200, 90, 0.4), transparent 50%),
-    radial-gradient(ellipse 60% 45% at 50% 100%, rgba(210, 240, 140, 0.5), transparent 55%),
-    linear-gradient(155deg, #d4efb0 0%, #e8f5d8 35%, #cfe9b4 70%, #eef8e0 100%);
+    radial-gradient(ellipse 80% 55% at 15% 10%, rgba(80, 180, 100, 0.28), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 90% 20%, rgba(40, 140, 80, 0.22), transparent 50%),
+    radial-gradient(ellipse 60% 45% at 50% 100%, rgba(30, 100, 60, 0.25), transparent 55%),
+    linear-gradient(155deg, #06140c 0%, #0a1f12 35%, #0f2a18 70%, #081810 100%);
   background-size: 140% 140%, 150% 150%, 130% 130%, 100% 100%;
   background-position: 0% 0%, 100% 0%, 50% 100%, 0% 0%;
   background-attachment: fixed;
@@ -83,7 +83,7 @@ body {
 
 .toolbar .primary {
   background: var(--accent);
-  color: #f7ffe8;
+  color: #062010;
   border: none;
   padding: 0.45rem 0.9rem;
   border-radius: 6px;
@@ -206,7 +206,7 @@ body {
   width: 100%;
   height: 8px;
   border-radius: 4px;
-  background: #dcefc4;
+  background: #1a4028;
 }
 
 .row-label {
@@ -226,7 +226,7 @@ body {
   padding: 0.35rem 0.5rem;
   margin: 0.15rem;
   border-radius: 8px;
-  background: #e7f6d4;
+  background: #1f4a2e;
   color: var(--text);
   border: 1px solid var(--border);
   cursor: grab;
