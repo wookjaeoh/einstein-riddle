@@ -418,3 +418,74 @@ body.interaction-locked .card { cursor: not-allowed; }
 .color-red { background: #d4534a; }
 .color-green { background: #3f9b5f; }
 .color-white { background: #f2f2f2; border: 1px solid #ccc; }
+
+.hidden { display: none !important; }
+
+.giveup-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.giveup-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 16, 24, 0.55);
+}
+
+.giveup-modal__dialog {
+  position: relative;
+  z-index: 1;
+  width: min(28rem, 92vw);
+  min-height: 8.5rem;
+  padding: 1.35rem 1.75rem 1.15rem;
+  background: #ffffff;
+  color: #1a2a32;
+  border: 3px solid #f0892a;
+  border-radius: 1rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1rem;
+}
+
+.giveup-modal__message {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.giveup-modal__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.giveup-modal__btn {
+  font: inherit;
+  min-width: 5.5rem;
+  padding: 0.45rem 1.1rem;
+  border-radius: 0.65rem;
+  border: 2px solid #f0892a;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.giveup-modal__btn--yes {
+  background: #f0892a;
+  color: #fff;
+}
+
+.giveup-modal__btn--no {
+  background: #ffffff;
+  color: #c56a12;
+}

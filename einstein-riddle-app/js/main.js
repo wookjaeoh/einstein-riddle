@@ -271,8 +271,10 @@ async function animateAnswerFill(queue, session) {
 
 document.getElementById("btn-reveal-answer").onclick = async () => {
   if (game.isInteractionLocked()) return;
-  if (!confirm("포기하시겠습니까?")) return;
-  game.stopTimer();
+  const confirmed = await askGiveUpConfirm();
+  if (!confirmed) return;
+  game.resetTimer();
+  document.getElementById("timer").textContent = formatMs(0);
   game.lockInteraction();
   updateLockedControls();
   document.body.classList.add("interaction-locked");
@@ -292,6 +294,43 @@ document.getElementById("btn-reveal-answer").onclick = async () => {
   fb.className = "feedback";
   fb.textContent = "포기했습니다. 정답을 표시합니다.";
 };
+
+function askGiveUpConfirm() {
+  const modal = document.getElementById("giveup-modal");
+  const yesBtn = document.getElementById("giveup-yes");
+  const noBtn = document.getElementById("giveup-no");
+  return new Promise((resolve) => {
+    function close(result) {
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+      yesBtn.removeEventListener("click", onYes);
+      noBtn.removeEventListener("click", onNo);
+      modal.removeEventListener("click", onBackdrop);
+      document.removeEventListener("keydown", onKey);
+      resolve(result);
+    }
+    function onYes() {
+      close(true);
+    }
+    function onNo() {
+      close(false);
+    }
+    function onBackdrop(e) {
+      if (e.target.matches("[data-giveup-cancel]")) close(false);
+    }
+    function onKey(e) {
+      if (e.key === "Escape") close(false);
+      if (e.key === "Enter") close(true);
+    }
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+    yesBtn.addEventListener("click", onYes);
+    noBtn.addEventListener("click", onNo);
+    modal.addEventListener("click", onBackdrop);
+    document.addEventListener("keydown", onKey);
+    yesBtn.focus();
+  });
+}
 
 function startNewPuzzle() {
   revealGeneration += 1;

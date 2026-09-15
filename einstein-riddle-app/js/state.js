@@ -259,6 +259,7 @@ export function createGameState() {
     canUndo,
     ensureTimerStarted,
     stopTimer,
+    resetTimer,
     getElapsedMs,
     isTimerRunning,
     toggleClueRead,
