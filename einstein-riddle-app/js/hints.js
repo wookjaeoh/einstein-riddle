@@ -44,8 +44,7 @@ function bundleCount(houseCount, categories) {
 function directionText(focusKind) {
   if (focusKind === "atHouse") return "위치가 직접 정해진 단서부터 확인해 보세요.";
   if (focusKind === "sameHouse") return "같은 집을 연결하는 단서부터 확인해 보세요.";
-  if (focusKind === "nextTo") return "옆집 관계 단서를 먼저 연결해 보세요.";
-  return "왼쪽·오른쪽 위치 단서를 먼저 확인해 보세요.";
+  return "단서끼리 연결해 후보를 좁혀 보세요.";
 }
 
 function cluesText(firstNum, secondNum) {
@@ -114,7 +113,7 @@ function buildReasoning({ clues, clueIndices, anchor, factPlacement }) {
       steps.push(`② 정답 배치와 맞추면 ${house}번 집 ${catLabel} = ${value}`);
     }
   } else {
-    steps.push(`① 단서 ${nums[0] ?? clueIndex(clues, anchor.id)}: 「${clipQuote(primary?.text ?? anchor.text)}」 → 옆집/좌우 관계로 후보를 줄입니다.`);
+    steps.push(`① 단서 ${nums[0] ?? clueIndex(clues, anchor.id)}: 「${clipQuote(primary?.text ?? anchor.text)}」 → 관련 단서로 후보를 줄입니다.`);
     if (secondary) {
       steps.push(`② 단서 ${nums[1]}: 「${clipQuote(secondary.text)}」 → 후보가 하나로 모입니다.`);
       steps.push(`③ 따라서 ${house}번 집 ${catLabel} = ${value}`);
@@ -167,35 +166,28 @@ function factFromAnswer(answer, categories, houseCount, usedFacts, clues) {
 }
 
 function pickBundleAnchors(clues, count) {
-  const byKind = {
-    atHouse: clues.filter((c) => c.kind === "atHouse"),
-    sameHouse: clues.filter((c) => c.kind === "sameHouse"),
-    nextTo: clues.filter((c) => c.kind === "nextTo"),
-    leftOf: clues.filter((c) => c.kind === "leftOf"),
-  };
-  const order = ["atHouse", "sameHouse", "nextTo", "leftOf"];
+  // Prefer absolute / same-house clues. Avoid left/right (leftOf, nextTo) anchors
+  // so direction hints do not push learners to "check left and right positions".
+  const preferred = clues.filter((c) => c.kind === "atHouse" || c.kind === "sameHouse");
+  const fallback = clues.filter((c) => c.kind !== "atHouse" && c.kind !== "sameHouse");
+  const ordered = [...preferred, ...fallback];
   const anchors = [];
   const usedIds = new Set();
 
-  for (const kind of order) {
-    for (const clue of byKind[kind]) {
-      if (anchors.length >= count) break;
-      if (usedIds.has(clue.id)) continue;
-      anchors.push({ focusKind: kind, anchor: clue });
-      usedIds.add(clue.id);
-    }
+  for (const clue of ordered) {
     if (anchors.length >= count) break;
+    if (usedIds.has(clue.id)) continue;
+    const focusKind =
+      clue.kind === "atHouse" || clue.kind === "sameHouse" ? clue.kind : "sameHouse";
+    anchors.push({ focusKind, anchor: clue });
+    usedIds.add(clue.id);
   }
 
   while (anchors.length < count && clues.length) {
     const clue = clues[anchors.length % clues.length];
-    if (!usedIds.has(clue.id)) {
-      anchors.push({ focusKind: clue.kind, anchor: clue });
-      usedIds.add(clue.id);
-    } else {
-      anchors.push({ focusKind: clue.kind, anchor: clue });
-    }
-    if (anchors.length >= count) break;
+    const focusKind =
+      clue.kind === "atHouse" || clue.kind === "sameHouse" ? clue.kind : "sameHouse";
+    anchors.push({ focusKind, anchor: clue });
   }
 
   return anchors.slice(0, count);

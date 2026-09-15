@@ -423,6 +423,12 @@ assert(easy.hints[0].stage === "direction", "first hint direction");
 assert(easy.hints[1].stage === "clues", "second hint clue guidance");
 assert(easy.hints[2].stage === "fact", "third hint fact");
 assert(
+  easy.hints
+    .filter((h) => h.stage === "direction")
+    .every((h) => !/왼쪽|오른쪽|좌우|옆집/.test(h.text)),
+  "direction hints avoid left/right position phrasing",
+);
+assert(
   easy.hints[1].meta?.clueIndices?.every(
     (index) => Number.isInteger(index) && index >= 1 && index <= easy.clues.length,
   ),
