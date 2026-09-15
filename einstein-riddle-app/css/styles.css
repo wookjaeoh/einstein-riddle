@@ -243,13 +243,33 @@ body {
   background: #18314a;
   color: var(--text);
   border: 1px solid var(--border);
-  cursor: grab;
+  cursor: url("../assets/cursors/hand-open.svg") 6 4, grab;
   user-select: none;
-  touch-action: none;
+  touch-action: manipulation;
   font-size: 0.8rem;
 }
 
-.card.dragging { opacity: 0.7; cursor: grabbing; }
+.card.dragging,
+.card.picked {
+  opacity: 0.4;
+}
+
+.card-ghost {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.2));
+  scale: 1.06;
+  cursor: url("../assets/cursors/hand-grab.svg") 8 6, grabbing;
+}
+
+body.holding-card,
+body.holding-card * {
+  cursor: url("../assets/cursors/hand-grab.svg") 8 6, grabbing !important;
+}
+
+body.holding-card .card.picked {
+  cursor: url("../assets/cursors/hand-grab.svg") 8 6, grabbing !important;
+}
+
 
 .pool {
   margin-top: 0.75rem;

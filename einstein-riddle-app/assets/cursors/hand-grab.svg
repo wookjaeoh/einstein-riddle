@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- grabbing right hand -->
+  <path fill="#f2d3a8" stroke="#5a3d2b" stroke-width="1.2" stroke-linejoin="round"
+    d="M10 16.5v-2a1.4 1.4 0 0 1 2.8 0V16
+       M13 15.5v-3.2a1.4 1.4 0 0 1 2.8 0V15
+       M16 15v-2.8a1.4 1.4 0 0 1 2.8 0V15.5
+       M19 16v-2a1.4 1.4 0 1 1 2.8 0V18
+       C22 24 19 28 15.2 28 11 28 8.5 24.5 8.5 20v-2.2a1.4 1.4 0 0 1 2.8 0V18"/>
+</svg>

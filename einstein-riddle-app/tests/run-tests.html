@@ -79,16 +79,21 @@ function seededRandom(seed) {
 
 function testDragCancelCleanup() {
   let dropped = false;
+  let dropTo = null;
   let locked = false;
   let cloneCount = 0;
   const cardClasses = new Set();
   const poolClasses = new Set();
-  const cardListeners = {};
+  const bodyClasses = new Set();
   let ghostNode = null;
   let ghostRemoved = false;
 
   const ghost = {
     style: {},
+    classList: {
+      add() {},
+      remove() {},
+    },
     remove() {
       ghostRemoved = true;
     },
@@ -109,13 +114,12 @@ function testDragCancelCleanup() {
       ghostNode = ghost;
       return ghost;
     },
-    setPointerCapture() {},
-    releasePointerCapture() {},
-    addEventListener(type, listener) {
-      cardListeners[type] = listener;
-    },
-    removeEventListener(type, listener) {
-      if (cardListeners[type] === listener) delete cardListeners[type];
+  };
+
+  const slot = {
+    dataset: { category: "nation", houseIndex: "0" },
+    closest(selector) {
+      return selector === ".slot" ? this : null;
     },
   };
 
@@ -134,17 +138,24 @@ function testDragCancelCleanup() {
   };
   const body = {
     children: [],
+    classList: {
+      toggle(name, force) {
+        if (force) bodyClasses.add(name);
+        else bodyClasses.delete(name);
+      },
+    },
     appendChild(node) {
       this.children.push(node);
     },
   };
+  let pointTarget = null;
   const fakeDocument = {
     body,
     querySelectorAll() {
       return [];
     },
     elementFromPoint() {
-      return null;
+      return pointTarget;
     },
   };
   const fakeWindow = {
@@ -157,8 +168,9 @@ function testDragCancelCleanup() {
   const dragDrop = createDragDrop({
     boardEl: {},
     poolEl,
-    onDrop: () => {
+    onDrop: ({ to }) => {
       dropped = true;
+      dropTo = to;
     },
     rootEl,
     targetDocument: fakeDocument,
@@ -167,55 +179,58 @@ function testDragCancelCleanup() {
   });
   dragDrop.bind();
 
-  rootEl.listeners.pointerdown({
+  rootEl.listeners.click({
     preventDefault() {},
     target: card,
     clientX: 10,
     clientY: 20,
-    pointerId: 1,
   });
-  assert(dragDrop.isDragging(), "drag starts on pointerdown");
-  assert(dragDrop.hasGhost(), "ghost is created while dragging");
-  assert(cardClasses.has("dragging"), "card gets dragging class");
+  assert(dragDrop.isHolding(), "click picks up card");
+  assert(dragDrop.hasGhost(), "ghost is created while holding");
+  assert(cardClasses.has("picked"), "card gets picked class");
+  assert(bodyClasses.has("holding-card"), "body gets holding-card class");
 
-  fakeWindow.listeners.pointercancel({ pointerId: 1, clientX: 10, clientY: 20 });
-  assert(!dragDrop.isDragging(), "pointercancel ends drag session");
-  assert(!dragDrop.hasGhost(), "pointercancel removes ghost");
-  assert(ghostRemoved, "pointercancel calls ghost.remove");
-  assert(!cardClasses.has("dragging"), "pointercancel clears dragging class");
-  assert(!dropped, "pointercancel does not invoke onDrop");
+  fakeWindow.listeners.keydown({ key: "Escape" });
+  assert(!dragDrop.isHolding(), "Escape cancels holding");
+  assert(!dragDrop.hasGhost(), "Escape removes ghost");
+  assert(ghostRemoved, "Escape calls ghost.remove");
+  assert(!cardClasses.has("picked"), "Escape clears picked class");
+  assert(!dropped, "Escape does not invoke onDrop");
 
   dropped = false;
   ghostRemoved = false;
   cardClasses.clear();
-  rootEl.listeners.pointerdown({
+  bodyClasses.clear();
+  rootEl.listeners.click({
     preventDefault() {},
     target: card,
     clientX: 30,
     clientY: 40,
-    pointerId: 2,
   });
-  cardListeners.lostpointercapture?.({ pointerId: 2 });
-  assert(!dragDrop.isDragging(), "lostpointercapture ends drag session");
-  assert(!dragDrop.hasGhost(), "lostpointercapture removes ghost");
-  assert(ghostRemoved, "lostpointercapture calls ghost.remove");
-  assert(!cardClasses.has("dragging"), "lostpointercapture clears dragging class");
-  assert(!dropped, "lostpointercapture does not invoke onDrop");
-
-  locked = true;
-  const clonesBeforeLockedPointerDown = cloneCount;
-  rootEl.listeners.pointerdown({
+  assert(dragDrop.isHolding(), "second pick holds card");
+  pointTarget = slot;
+  rootEl.listeners.click({
     preventDefault() {},
-    target: card,
+    target: slot,
     clientX: 50,
     clientY: 60,
-    pointerId: 3,
   });
-  fakeWindow.listeners.pointerup({ pointerId: 3, clientX: 50, clientY: 60 });
-  assert(!dragDrop.isDragging(), "locked pointerdown does not start drag");
-  assert(!dragDrop.hasGhost(), "locked pointerdown does not create ghost");
-  assert(cloneCount === clonesBeforeLockedPointerDown, "locked pointerdown does not clone card");
-  assert(!dropped, "locked pointer path does not invoke onDrop");
+  assert(dropped, "click slot places held card");
+  assert(dropTo?.type === "slot" && dropTo.houseIndex === 0, "drop targets clicked slot");
+  assert(!dragDrop.isHolding(), "place clears holding");
+  assert(!dragDrop.hasGhost(), "place removes ghost");
+
+  locked = true;
+  const clonesBeforeLocked = cloneCount;
+  rootEl.listeners.click({
+    preventDefault() {},
+    target: card,
+    clientX: 70,
+    clientY: 80,
+  });
+  assert(!dragDrop.isHolding(), "locked click does not pick card");
+  assert(!dragDrop.hasGhost(), "locked click does not create ghost");
+  assert(cloneCount === clonesBeforeLocked, "locked click does not clone card");
 }
 
 const expectedProfiles = {
