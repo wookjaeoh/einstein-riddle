@@ -317,6 +317,79 @@ for (const hint of reasoningPuzzle.hints.filter((h) => h.stage === "fact")) {
   assert(hint.reasoning.some((line) => /①|1\./.test(line) || line.includes("①")), `fact ${hint.id} numbered steps`);
 }
 
+function clueRelatesToFact(clue, factMeta, answer) {
+  const placements = [
+    clue?.cat && clue?.val ? { cat: clue.cat, val: clue.val } : null,
+    clue?.a,
+    clue?.b,
+  ].filter(Boolean);
+  const houseNumber = factMeta.houseIndex + 1;
+  return (
+    placements.some(
+      ({ cat, val }) =>
+        val === factMeta.val || answer[cat]?.indexOf(val) === factMeta.houseIndex,
+    ) ||
+    clue?.houseIndex === factMeta.houseIndex ||
+    clue?.houseIds?.includes(houseNumber)
+  );
+}
+
+function assertFactCitationsRelate(puzzle, label) {
+  for (const hint of puzzle.hints.filter((candidate) => candidate.stage === "fact")) {
+    const citedNumbers = hint.reasoning.flatMap((line) =>
+      [...line.matchAll(/단서\s+(\d+)/g)].map((match) => Number(match[1])),
+    );
+    assert(citedNumbers.length >= 1, `${label} ${hint.id} cites at least one clue`);
+    assert(
+      citedNumbers.every((number) =>
+        clueRelatesToFact(puzzle.clues[number - 1], hint.meta, puzzle.answer),
+      ),
+      `${label} ${hint.id} cites only clues related to its fact`,
+    );
+  }
+}
+
+assertFactCitationsRelate(reasoningPuzzle, "generated reasoning");
+
+const fallbackReasoningPuzzle = {
+  houseCount: 4,
+  categories: ["color", "nation", "drink", "food"],
+  answer: {
+    color: ["yellow", "blue", "red", "green"],
+    nation: ["norway", "denmark", "england", "sweden"],
+    drink: ["water", "tea", "milk", "coffee"],
+    food: ["gimbap", "ramen", "pizza", "burger"],
+  },
+  clues: [
+    {
+      id: "r1",
+      kind: "nextTo",
+      a: { cat: "color", val: "yellow" },
+      b: { cat: "nation", val: "denmark" },
+      text: "노란 집은 덴마크 사람이 사는 집 옆에 있다.",
+      values: ["yellow", "denmark"],
+    },
+    {
+      id: "r2",
+      kind: "leftOf",
+      a: { cat: "drink", val: "tea" },
+      b: { cat: "drink", val: "milk" },
+      text: "차를 마시는 집은 우유를 마시는 집 왼쪽에 있다.",
+      values: ["tea", "milk"],
+    },
+    {
+      id: "r3",
+      kind: "nextTo",
+      a: { cat: "food", val: "pizza" },
+      b: { cat: "nation", val: "sweden" },
+      text: "피자를 먹는 집은 스웨덴 사람이 사는 집 옆에 있다.",
+      values: ["pizza", "sweden"],
+    },
+  ],
+};
+fallbackReasoningPuzzle.hints = buildHints(fallbackReasoningPuzzle);
+assertFactCitationsRelate(fallbackReasoningPuzzle, "answer fallback reasoning");
+
 const hard = generatePuzzle("hard", { timeLimitMs: 2500, random: seededRandom(9) });
 const expert = generatePuzzle("expert", { timeLimitMs: 2500, random: seededRandom(13) });
 assert(hard.hints.length >= 9, "hard has at least three hint bundles");
