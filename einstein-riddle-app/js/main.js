@@ -1,23 +1,19 @@
-import {
-  CATEGORIES,
-  HOUSES,
-  VALUES,
-  LABELS,
-  labelOf,
-} from "./puzzle-data.js";
+import { LABELS, labelOf } from "./puzzle-data.js";
 import { createGameState } from "./state.js";
 import { bindDragDrop } from "./drag-drop.js";
-import { renderClues, applyHighlight } from "./clues.js";
+import { renderClues } from "./clues.js";
 import { grade } from "./validate.js";
-import { bindTeacherPanel } from "./teacher.js";
 import { generatePuzzle } from "./generate.js";
+import { createTextScale } from "./text-scale.js";
 
 const game = createGameState();
-let teacherPanel;
+const textScale = createTextScale({ storage: localStorage });
 
 const HELP_TEXT = {
-  easy: "카드를 집의 칸으로 끌어다 놓고, 단서를 눌러 관련 칸을 강조해 보세요.",
-  hard: "단서가 더 적습니다. 추론을 더 깊게 하세요.",
+  easy: "카드를 집의 칸으로 끌어다 놓고, 단서를 눌러 읽음 표시를 하세요. 힌트는 아래 버튼으로 확인할 수 있습니다.",
+  normal: "동물 카테고리가 추가됩니다. 단서를 연결해 추론해 보세요.",
+  hard: "다섯 채의 집과 모든 카테고리입니다. 단서를 꼼꼼히 연결하세요.",
+  expert: "단서가 더 적습니다. 힌트를 아껴 쓰며 깊게 추론해 보세요.",
 };
 
 function updateHelpText(difficulty) {
@@ -32,17 +28,43 @@ function formatMs(ms) {
   return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
 }
 
+function updateScaleControls() {
+  const value = textScale.get();
+  document.getElementById("scale-value").textContent = `${value}%`;
+  document.getElementById("scale-down").disabled = !textScale.canDecrease();
+  document.getElementById("scale-up").disabled = !textScale.canIncrease();
+}
+
+function applyTextScale() {
+  textScale.apply(document.documentElement);
+  updateScaleControls();
+}
+
 setInterval(() => {
   document.getElementById("timer").textContent = formatMs(game.getElapsedMs());
 }, 250);
-let selectedClueId = null;
 
 function renderBoard() {
   const board = document.getElementById("board");
+  const puzzle = game.getPuzzle();
+  if (!puzzle) {
+    board.innerHTML = "";
+    return;
+  }
+
+  const { houseCount, categories } = puzzle;
   const placement = game.getPlacement();
+  document.documentElement.style.setProperty("--house-count", String(houseCount));
+  board.setAttribute("aria-label", `${houseCount}채의 집`);
+
+  const tagline = document.getElementById("tagline");
+  if (tagline) {
+    tagline.textContent = `단서를 읽고 ${houseCount}채의 집 배치를 맞혀 보세요`;
+  }
+
   let html = `<div class="row-label"></div>`;
-  for (const h of HOUSES) {
-    const colorId = placement.color[h - 1];
+  for (let h = 1; h <= houseCount; h++) {
+    const colorId = placement.color?.[h - 1];
     const colorName = colorId ? labelOf(colorId) : "색 미정";
     html += `<div class="house-head" data-house="${h}">
       <span>${h}번 집</span>
@@ -50,9 +72,10 @@ function renderBoard() {
       <small>${colorName}</small>
     </div>`;
   }
-  for (const cat of CATEGORIES) {
+
+  for (const cat of categories) {
     html += `<div class="row-label">${LABELS[cat]}</div>`;
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < houseCount; i++) {
       const v = placement[cat][i];
       html += `<div class="slot" data-house-index="${i}" data-category="${cat}">
         ${v ? `<span class="card" draggable="false" data-value="${v}" data-category="${cat}">${labelOf(v)}</span>` : ""}
@@ -64,11 +87,17 @@ function renderBoard() {
 
 function renderPool() {
   const pool = document.getElementById("pool");
+  const puzzle = game.getPuzzle();
+  if (!puzzle) {
+    pool.innerHTML = "";
+    return;
+  }
+
   const placement = game.getPlacement();
-  const used = new Set(CATEGORIES.flatMap((c) => placement[c].filter(Boolean)));
+  const used = new Set(puzzle.categories.flatMap((c) => placement[c].filter(Boolean)));
   let html = "";
-  for (const cat of CATEGORIES) {
-    for (const v of VALUES[cat]) {
+  for (const cat of puzzle.categories) {
+    for (const v of puzzle.values[cat]) {
       if (used.has(v)) continue;
       html += `<span class="card" data-value="${v}" data-category="${cat}">${labelOf(v)}</span>`;
     }
@@ -76,22 +105,47 @@ function renderPool() {
   pool.innerHTML = html || "<span>모든 카드가 배치되었습니다</span>";
 }
 
+function renderHints() {
+  const list = document.getElementById("hint-list");
+  const status = document.getElementById("hint-status");
+  const button = document.getElementById("btn-hint");
+  const revealed = game.getRevealedHints();
+  const puzzle = game.getPuzzle();
+  const total = puzzle?.hints?.length ?? 0;
+
+  list.innerHTML = revealed.map((hint) => `<li>${hint.text}</li>`).join("");
+
+  if (!total) {
+    status.textContent = "";
+    button.disabled = true;
+    return;
+  }
+
+  if (revealed.length >= total) {
+    status.textContent = "모든 힌트를 확인했습니다.";
+    button.disabled = true;
+  } else {
+    status.textContent = `힌트 ${revealed.length} / ${total}`;
+    button.disabled = false;
+  }
+}
+
 function renderAll() {
   renderBoard();
   renderPool();
   const clues = game.getClues();
+  const readIds = new Set(clues.filter((c) => game.isClueRead(c.id)).map((c) => c.id));
   renderClues({
     container: document.getElementById("clues"),
     clues,
-    selectedId: selectedClueId,
-    onSelect(id) {
-      selectedClueId = id;
+    readIds,
+    onToggleRead(id) {
+      game.toggleClueRead(id);
       renderAll();
     },
   });
-  applyHighlight(selectedClueId, clues);
+  renderHints();
   document.getElementById("btn-undo").disabled = !game.canUndo();
-  teacherPanel?.refresh?.();
 }
 
 function resolveFrom(value, category) {
@@ -116,10 +170,20 @@ document.getElementById("btn-undo").onclick = () => {
 };
 
 document.getElementById("btn-reset").onclick = () => {
-  if (!confirm("배치만 초기화할까요? (타이머는 유지)")) return;
+  if (!confirm("배치만 초기화할까요? (타이머·힌트·읽음은 유지)")) return;
   game.resetPlacement({ keepTimer: true });
   renderAll();
   document.getElementById("feedback").textContent = "";
+};
+
+document.getElementById("btn-hint").onclick = () => {
+  const next = game.revealNextHint();
+  if (!next) {
+    document.getElementById("hint-status").textContent = "모든 힌트를 확인했습니다.";
+    document.getElementById("btn-hint").disabled = true;
+    return;
+  }
+  renderHints();
 };
 
 function startNewPuzzle() {
@@ -133,8 +197,7 @@ function startNewPuzzle() {
 
   requestAnimationFrame(() => {
     const puzzle = generatePuzzle(difficulty);
-    game.loadPuzzle({ answer: puzzle.answer, clues: puzzle.clues, difficulty });
-    selectedClueId = null;
+    game.loadPuzzle(puzzle);
     renderAll();
     button.disabled = false;
     feedback.className = "feedback";
@@ -159,7 +222,8 @@ document.getElementById("difficulty").onchange = () => {
 };
 
 document.getElementById("btn-submit").onclick = () => {
-  const result = grade(game.getPlacement(), game.getAnswer());
+  const puzzle = game.getPuzzle();
+  const result = grade(game.getPlacement(), game.getAnswer(), puzzle?.categories);
   const fb = document.getElementById("feedback");
   fb.className = "feedback";
   if (!result.complete) {
@@ -177,9 +241,15 @@ document.getElementById("btn-submit").onclick = () => {
   }
 };
 
-teacherPanel = bindTeacherPanel({
-  getPlacement: () => game.getPlacement(),
-  getAnswer: () => game.getAnswer(),
-});
+document.getElementById("scale-up").onclick = () => {
+  textScale.increase();
+  applyTextScale();
+};
 
+document.getElementById("scale-down").onclick = () => {
+  textScale.decrease();
+  applyTextScale();
+};
+
+applyTextScale();
 startNewPuzzle();

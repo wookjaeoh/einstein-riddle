@@ -1,9 +1,7 @@
-import { CATEGORIES } from "./puzzle-data.js";
-
-export function isComplete(placement) {
-  for (const cat of CATEGORIES) {
+export function isComplete(placement, categories = Object.keys(placement)) {
+  for (const cat of categories) {
     const row = placement[cat];
-    if (!row || row.length !== 5) return false;
+    if (!row || !row.length) return false;
     for (const v of row) {
       if (v == null || v === "") return false;
     }
@@ -11,21 +9,22 @@ export function isComplete(placement) {
   return true;
 }
 
-export function countWrong(placement, answer) {
+export function countWrong(placement, answer, categories = Object.keys(answer)) {
   let n = 0;
-  for (const cat of CATEGORIES) {
-    for (let i = 0; i < 5; i++) {
-      if (placement[cat][i] !== answer[cat][i]) n++;
+  for (const cat of categories) {
+    const len = answer[cat]?.length ?? 0;
+    for (let i = 0; i < len; i++) {
+      if (placement[cat]?.[i] !== answer[cat][i]) n++;
     }
   }
   return n;
 }
 
-export function grade(placement, answer) {
-  const complete = isComplete(placement);
+export function grade(placement, answer, categories = Object.keys(answer)) {
+  const complete = isComplete(placement, categories);
   if (!complete) {
     return { complete: false, wrongCount: null, solved: false };
   }
-  const wrongCount = countWrong(placement, answer);
+  const wrongCount = countWrong(placement, answer, categories);
   return { complete: true, wrongCount, solved: wrongCount === 0 };
 }

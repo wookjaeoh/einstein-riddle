@@ -23,7 +23,6 @@ import { buildHints, validateHints } from "../js/hints.js";
 import { createGameState } from "../js/state.js";
 import { createTextScale } from "../js/text-scale.js";
 import { renderClues } from "../js/clues.js";
-import { bindTeacherPanel } from "../js/teacher.js";
 import { createDragDrop } from "../js/drag-drop.js";
 
 let failed = 0;
@@ -39,123 +38,36 @@ function assert(condition, message) {
   console.error(`FAIL: ${message}`);
 }
 
+async function assertDomContracts() {
+  let html = "";
+  let mainSource = "";
+  try {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const dirname = path.dirname(fileURLToPath(import.meta.url));
+    html = fs.readFileSync(path.join(dirname, "../index.html"), "utf8");
+    mainSource = fs.readFileSync(path.join(dirname, "../js/main.js"), "utf8");
+  } catch {
+    html = await (await fetch("../index.html")).text();
+    mainSource = await (await fetch("../js/main.js")).text();
+  }
+  assert(html.includes('value="normal"'), "normal option exists");
+  assert(html.includes('value="expert"'), "expert option exists");
+  assert(html.includes('id="btn-hint"'), "hint button exists");
+  assert(html.includes('id="scale-up"'), "scale controls exist");
+  assert(!html.includes('id="btn-teacher"'), "teacher button removed");
+  assert(!mainSource.includes("./teacher.js"), "teacher import removed");
+}
+
+await assertDomContracts();
+
 function seededRandom(seed) {
   let state = seed >>> 0;
   return () => {
     state = (state * 1664525 + 1013904223) >>> 0;
     return state / 0x100000000;
   };
-}
-
-function fakeElement() {
-  const listeners = {};
-  const classes = new Set(["hidden"]);
-  return {
-    value: "",
-    textContent: "",
-    innerHTML: "",
-    attributes: {},
-    classList: {
-      add: (...names) => names.forEach((name) => classes.add(name)),
-      remove: (...names) => names.forEach((name) => classes.delete(name)),
-      contains: (name) => classes.has(name),
-      toggle(name) {
-        if (classes.has(name)) classes.delete(name);
-        else classes.add(name);
-      },
-    },
-    addEventListener(type, listener) {
-      listeners[type] = listener;
-    },
-    click() {
-      listeners.click?.();
-    },
-    setAttribute(name, value) {
-      this.attributes[name] = value;
-    },
-  };
-}
-
-function testTeacherRefresh() {
-  const ids = [
-    "teacher-panel",
-    "btn-teacher",
-    "btn-teacher-unlock",
-    "teacher-pw",
-    "teacher-error",
-    "teacher-body",
-    "teacher-login",
-    "answer-board",
-  ];
-  const elements = Object.fromEntries(ids.map((id) => [id, fakeElement()]));
-  const previousDocument = globalThis.document;
-  globalThis.document = { getElementById: (id) => elements[id] };
-
-  try {
-    let answer = structuredClone(FALLBACK_ANSWER);
-    const teacher = bindTeacherPanel({
-      getPlacement: () => structuredClone(FALLBACK_ANSWER),
-      getAnswer: () => answer,
-    });
-    elements["teacher-pw"].value = "teacher2026";
-    elements["btn-teacher-unlock"].click();
-    assert(elements["answer-board"].innerHTML.includes("노르웨이"), "teacher initially renders current answer");
-
-    answer = structuredClone(FALLBACK_ANSWER);
-    answer.nation[0] = "sweden";
-    assert(typeof teacher?.refresh === "function", "teacher binding exposes refresh API");
-    teacher?.refresh?.();
-    assert(!elements["answer-board"].innerHTML.includes("노르웨이"), "teacher refresh renders new puzzle answer");
-  } finally {
-    globalThis.document = previousDocument;
-  }
-}
-
-function testTeacherRefreshOnPlacementChange() {
-  const ids = [
-    "teacher-panel",
-    "btn-teacher",
-    "btn-teacher-unlock",
-    "teacher-pw",
-    "teacher-error",
-    "teacher-body",
-    "teacher-login",
-    "answer-board",
-  ];
-  const elements = Object.fromEntries(ids.map((id) => [id, fakeElement()]));
-  const previousDocument = globalThis.document;
-  globalThis.document = { getElementById: (id) => elements[id] };
-
-  try {
-    let placement = Object.fromEntries(CATEGORIES.map((cat) => [cat, [null, null, null, null, null]]));
-    const teacher = bindTeacherPanel({
-      getPlacement: () => placement,
-      getAnswer: () => FALLBACK_ANSWER,
-    });
-    elements["teacher-pw"].value = "teacher2026";
-    elements["btn-teacher-unlock"].click();
-    assert(
-      elements["answer-board"].innerHTML.includes("틀린 칸(비교): 25"),
-      "teacher shows all empty cells as wrong",
-    );
-
-    placement = structuredClone(FALLBACK_ANSWER);
-    teacher.refresh();
-    assert(
-      elements["answer-board"].innerHTML.includes("틀린 칸(비교): 0"),
-      "teacher refresh updates comparison after placement matches answer",
-    );
-
-    placement = structuredClone(FALLBACK_ANSWER);
-    placement.animal[0] = "dog";
-    teacher.refresh();
-    assert(
-      elements["answer-board"].innerHTML.includes("틀린 칸(비교): 1"),
-      "teacher refresh updates comparison after card move",
-    );
-  } finally {
-    globalThis.document = previousDocument;
-  }
 }
 
 function testDragCancelCleanup() {
@@ -554,8 +466,6 @@ function testRenderCluesReadToggle() {
 }
 
 testRenderCluesReadToggle();
-testTeacherRefresh();
-testTeacherRefreshOnPlacementChange();
 testDragCancelCleanup();
 
 const outEl = document.getElementById("out");
