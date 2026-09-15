@@ -55,6 +55,44 @@ function cluesText(firstNum, secondNum) {
   return `단서 ${firstNum ?? 1}번을 다른 단서와 함께 연결해 보세요.`;
 }
 
+function clipQuote(text, max = 28) {
+  const t = String(text ?? "").trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1)}…`;
+}
+
+function buildReasoning({ clues, clueIndices, anchor, factPlacement }) {
+  const steps = [];
+  const nums = (clueIndices ?? []).filter(Boolean);
+  const primary = nums[0] ? clues[nums[0] - 1] : anchor;
+  const secondary = nums[1] && nums[1] !== nums[0] ? clues[nums[1] - 1] : null;
+  const house = factPlacement.houseIndex + 1;
+  const value = labelOf(factPlacement.val);
+  const catLabel = categoryLabel(factPlacement.cat);
+
+  if (anchor.kind === "atHouse") {
+    steps.push(`① 단서 ${nums[0] ?? clueIndex(clues, anchor.id)}: 「${clipQuote(primary?.text ?? anchor.text)}」 → ${house}번 집의 ${catLabel}이(가) 직접 정해집니다.`);
+    steps.push(`② 따라서 ${house}번 집 ${catLabel} = ${value}`);
+  } else if (anchor.kind === "sameHouse") {
+    steps.push(`① 단서 ${nums[0] ?? clueIndex(clues, anchor.id)}: 「${clipQuote(primary?.text ?? anchor.text)}」 → 두 속성이 같은 집입니다.`);
+    if (secondary) {
+      steps.push(`② 단서 ${nums[1]}: 「${clipQuote(secondary.text)}」 → 위치·속성을 이어서 좁힙니다.`);
+      steps.push(`③ 따라서 ${house}번 집 ${catLabel} = ${value}`);
+    } else {
+      steps.push(`② 정답 배치와 맞추면 ${house}번 집 ${catLabel} = ${value}`);
+    }
+  } else {
+    steps.push(`① 단서 ${nums[0] ?? clueIndex(clues, anchor.id)}: 「${clipQuote(primary?.text ?? anchor.text)}」 → 옆집/좌우 관계로 후보를 줄입니다.`);
+    if (secondary) {
+      steps.push(`② 단서 ${nums[1]}: 「${clipQuote(secondary.text)}」 → 후보가 하나로 모입니다.`);
+      steps.push(`③ 따라서 ${house}번 집 ${catLabel} = ${value}`);
+    } else {
+      steps.push(`② 따라서 ${house}번 집 ${catLabel} = ${value}`);
+    }
+  }
+  return steps.slice(0, 3);
+}
+
 function factFromClue(clue, answer) {
   if (clue.kind === "atHouse") {
     return { cat: clue.cat, val: clue.val, houseIndex: clue.houseIndex };
@@ -182,11 +220,18 @@ export function buildHints({ clues, answer, houseCount, categories }) {
       id: `h${bundle}-fact`,
       stage: "fact",
       text: factTextForPlacement(factPlacement),
+      reasoning: buildReasoning({
+        clues,
+        clueIndices: [firstNum, secondNum].filter(Boolean),
+        anchor,
+        factPlacement,
+      }),
       meta: {
         bundle,
         cat: factPlacement.cat,
         val: factPlacement.val,
         houseIndex: factPlacement.houseIndex,
+        clueIndices: [firstNum, secondNum].filter(Boolean),
       },
     });
   });
@@ -234,6 +279,8 @@ export function validateHints({ hints, clues, answer, houseCount, categories }) 
     if (!categories.includes(cat)) return false;
     if (!Number.isInteger(houseIndex) || houseIndex < 0 || houseIndex >= houseCount) return false;
     if (answer[cat]?.[houseIndex] !== val) return false;
+    if (!Array.isArray(factHint.reasoning) || factHint.reasoning.length < 2 || factHint.reasoning.length > 3) return false;
+    if (!factHint.reasoning.some((line) => line.includes("「"))) return false;
   }
 
   return true;

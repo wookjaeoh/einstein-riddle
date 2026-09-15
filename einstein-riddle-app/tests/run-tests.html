@@ -308,6 +308,15 @@ assert(
   "hint clue numbers come from generated puzzle",
 );
 
+const reasoningPuzzle = generatePuzzle("easy", { timeLimitMs: 2500, random: seededRandom(21) });
+assert(validateHints(reasoningPuzzle), "validateHints accepts puzzle with reasoning");
+for (const hint of reasoningPuzzle.hints.filter((h) => h.stage === "fact")) {
+  assert(Array.isArray(hint.reasoning), `fact ${hint.id} has reasoning array`);
+  assert(hint.reasoning.length >= 2 && hint.reasoning.length <= 3, `fact ${hint.id} reasoning 2-3 steps`);
+  assert(hint.reasoning.some((line) => line.includes("단서") && line.includes("「")), `fact ${hint.id} cites clue quote`);
+  assert(hint.reasoning.some((line) => /①|1\./.test(line) || line.includes("①")), `fact ${hint.id} numbered steps`);
+}
+
 const hard = generatePuzzle("hard", { timeLimitMs: 2500, random: seededRandom(9) });
 const expert = generatePuzzle("expert", { timeLimitMs: 2500, random: seededRandom(13) });
 assert(hard.hints.length >= 9, "hard has at least three hint bundles");
