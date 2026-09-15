@@ -21,13 +21,40 @@ html {
 body {
   margin: 0;
   font-family: "Pretendard", "Noto Sans KR", sans-serif;
-  background:
-    radial-gradient(ellipse at 20% 0%, rgba(100, 217, 255, 0.12), transparent 45%),
-    radial-gradient(ellipse at 90% 10%, rgba(93, 224, 163, 0.08), transparent 40%),
-    linear-gradient(165deg, #05101c 0%, var(--page-bg) 40%, #0a1c30 100%);
+  background-color: var(--page-bg);
+  background-image:
+    radial-gradient(ellipse 80% 55% at 15% 10%, rgba(100, 217, 255, 0.22), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 90% 20%, rgba(93, 224, 163, 0.14), transparent 50%),
+    radial-gradient(ellipse 60% 45% at 50% 100%, rgba(100, 140, 255, 0.12), transparent 55%),
+    linear-gradient(155deg, #041018 0%, #071525 35%, #0a1c30 70%, #06121f 100%);
+  background-size: 140% 140%, 150% 150%, 130% 130%, 100% 100%;
+  background-position: 0% 0%, 100% 0%, 50% 100%, 0% 0%;
+  background-attachment: fixed;
   color: var(--text);
   min-height: 100vh;
+  animation: page-bg-drift 22s ease-in-out infinite alternate;
 }
+
+@keyframes page-bg-drift {
+  0% {
+    background-position: 0% 10%, 100% 0%, 40% 100%, 0% 0%;
+  }
+  50% {
+    background-position: 30% 0%, 70% 25%, 60% 80%, 0% 0%;
+  }
+  100% {
+    background-position: 10% 30%, 80% 10%, 50% 90%, 0% 0%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body {
+    animation: none;
+    background-size: 100% 100%;
+    background-position: 0% 0%, 100% 0%, 50% 100%, 0% 0%;
+  }
+}
+
 
 .top-bar { padding: 1rem 1.25rem 0.5rem; }
 .top-bar h1 { margin: 0; font-size: clamp(1.4rem, 3vw, 2rem); letter-spacing: -0.02em; }
