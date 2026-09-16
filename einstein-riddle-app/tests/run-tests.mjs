@@ -55,8 +55,16 @@ async function assertDomContracts() {
     html = await (await fetch("../index.html")).text();
     mainSource = await (await fetch("../js/main.js")).text();
   }
-  assert(html.includes('value="normal"'), "normal option exists");
-  assert(html.includes('value="expert"'), "expert option exists");
+  assert(html.includes('data-difficulty="normal"'), "normal difficulty choice exists");
+  assert(html.includes('data-difficulty="expert"'), "expert difficulty choice exists");
+  assert(html.includes('id="difficulty-choices"'), "howto difficulty picker exists");
+  assert(html.includes('id="howto-status"'), "howto status exists");
+  assert(!html.includes('<select id="difficulty">'), "game screen difficulty select removed");
+  assert(
+    html.indexOf('id="difficulty-choices"') < html.indexOf('id="btn-howto-start"'),
+    "difficulty picker above howto start button",
+  );
+  assert(!mainSource.includes('배치만 초기화할까요'), "reset no longer confirms");
   assert(html.includes('id="btn-hint"'), "hint button exists");
   assert(html.includes('id="btn-reveal-answer"'), "reveal answer button exists");
   assert(html.indexOf('id="btn-hint"') < html.indexOf('id="btn-reveal-answer"'), "reveal button after hint button");

@@ -47,6 +47,13 @@
         <li>힌트 보기를 통해 기록을 단축해보세요.</li>
         <li>난이도를 조절해가며 최고의 추론가가 되어봅시다.</li>
       </ol>
+      <div id="difficulty-choices" class="difficulty-choices" role="group" aria-label="난이도 선택">
+        <button type="button" class="difficulty-dot difficulty-dot--easy" data-difficulty="easy" aria-pressed="false">쉬움</button>
+        <button type="button" class="difficulty-dot difficulty-dot--normal" data-difficulty="normal" aria-pressed="false">보통</button>
+        <button type="button" class="difficulty-dot difficulty-dot--hard" data-difficulty="hard" aria-pressed="false">어려움</button>
+        <button type="button" class="difficulty-dot difficulty-dot--expert" data-difficulty="expert" aria-pressed="false">매우<br />어려움</button>
+      </div>
+      <p id="howto-status" class="howto-status" role="status">난이도를 선택해 주세요.</p>
       <button type="button" id="btn-howto-start" class="cta-start">게임 시작</button>
     </div>
   </section>
@@ -61,14 +68,7 @@
     </header>
     <main id="app">
       <section class="toolbar" id="toolbar">
-        <label>난이도
-          <select id="difficulty">
-            <option value="easy">쉬움</option>
-            <option value="normal">보통</option>
-            <option value="hard">어려움</option>
-            <option value="expert">매우 어려움</option>
-          </select>
-        </label>
+        <span id="difficulty-badge" class="difficulty-badge">쉬움</span>
         <button type="button" id="btn-new">새 문제</button>
         <div class="timer" id="timer" aria-live="polite">00:00</div>
         <button type="button" id="btn-undo" disabled>되돌리기</button>

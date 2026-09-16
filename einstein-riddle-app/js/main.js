@@ -12,6 +12,14 @@ import { bindRankingUi, openCelebrateRegister } from "./rankings.js";
 const game = createGameState();
 const textScale = createTextScale({ storage: localStorage });
 let revealGeneration = 0;
+let selectedDifficulty = null;
+
+const DIFFICULTY_LABELS = {
+  easy: "쉬움",
+  normal: "보통",
+  hard: "어려움",
+  expert: "매우 어려움",
+};
 
 const HELP_TEXT = {
   easy: "카드를 한 번 클릭해 집고, 칸을 다시 클릭해 놓으세요. 단서를 눌러 읽음 표시를 하세요. 힌트는 아래 버튼으로 확인할 수 있습니다.",
@@ -77,6 +85,13 @@ function renderBoard() {
   const tagline = document.getElementById("tagline");
   if (tagline) {
     tagline.textContent = `단서를 읽고 ${houseCount}채의 집 배치를 맞혀 보세요`;
+  }
+
+  const badge = document.getElementById("difficulty-badge");
+  if (badge) {
+    const current = game.getDifficulty();
+    badge.textContent = DIFFICULTY_LABELS[current] ?? current;
+    badge.dataset.difficulty = current;
   }
 
   let html = `<div class="row-label"></div>`;
@@ -204,7 +219,6 @@ document.getElementById("btn-undo").onclick = () => {
 };
 
 document.getElementById("btn-reset").onclick = () => {
-  if (!confirm("배치만 초기화할까요? (타이머·힌트·읽음은 유지)")) return;
   game.resetPlacement({ keepTimer: true });
   renderAll();
   document.getElementById("feedback").textContent = "";
@@ -336,7 +350,7 @@ function askGiveUpConfirm() {
 
 function startNewPuzzle({ autoStartTimer = false } = {}) {
   revealGeneration += 1;
-  const difficulty = document.getElementById("difficulty").value;
+  const difficulty = selectedDifficulty ?? game.getDifficulty();
   updateHelpText(difficulty);
   const button = document.getElementById("btn-new");
   const feedback = document.getElementById("feedback");
@@ -384,6 +398,26 @@ function showScreen(name) {
   document.body.classList.toggle("on-game", isGame);
 }
 
+function setSelectedDifficulty(difficulty) {
+  selectedDifficulty = difficulty;
+  for (const button of document.querySelectorAll("#difficulty-choices .difficulty-dot")) {
+    const isActive = button.dataset.difficulty === difficulty;
+    button.classList.toggle("is-selected", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+  }
+  const status = document.getElementById("howto-status");
+  if (status) {
+    status.classList.remove("is-warning");
+    status.textContent = `${DIFFICULTY_LABELS[difficulty]} 난이도로 시작합니다.`;
+  }
+}
+
+document.getElementById("difficulty-choices").addEventListener("click", (event) => {
+  const button = event.target.closest(".difficulty-dot");
+  if (!button) return;
+  setSelectedDifficulty(button.dataset.difficulty);
+});
+
 document.getElementById("btn-intro-start").onclick = () => {
   showScreen("howto");
 };
@@ -393,6 +427,16 @@ document.getElementById("btn-howto-back").onclick = () => {
 };
 
 document.getElementById("btn-howto-start").onclick = () => {
+  if (!selectedDifficulty) {
+    const status = document.getElementById("howto-status");
+    status.textContent = "난이도를 먼저 선택해 주세요.";
+    status.classList.add("is-warning");
+    document.getElementById("difficulty-choices").classList.remove("needs-pick");
+    requestAnimationFrame(() => {
+      document.getElementById("difficulty-choices").classList.add("needs-pick");
+    });
+    return;
+  }
   showScreen("game");
   startNewPuzzle({ autoStartTimer: true });
 };
@@ -404,15 +448,6 @@ document.getElementById("btn-game-back").onclick = () => {
 
 document.getElementById("btn-new").onclick = () => {
   if (!confirm("새 문제를 만들까요? 진행 중 배치는 사라집니다.")) return;
-  startNewPuzzle({ autoStartTimer: true });
-};
-
-document.getElementById("difficulty").onchange = () => {
-  const select = document.getElementById("difficulty");
-  if (!confirm("난이도를 바꾸면 새 문제가 만들어집니다. 계속할까요?")) {
-    select.value = game.getDifficulty();
-    return;
-  }
   startNewPuzzle({ autoStartTimer: true });
 };
 

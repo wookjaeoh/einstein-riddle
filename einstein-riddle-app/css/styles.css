@@ -624,6 +624,85 @@ body.interaction-locked .card { cursor: not-allowed; }
   margin: 0.55rem 0;
 }
 
+.difficulty-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.difficulty-dot {
+  font: inherit;
+  width: 5.5rem;
+  height: 5.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
+  border: 3px solid transparent;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.difficulty-dot--easy { background: #2e9e4f; }
+.difficulty-dot--normal { background: #e0b91c; color: #3a2b00; }
+.difficulty-dot--hard { background: #ef8a2b; }
+.difficulty-dot--expert { background: #d8402f; }
+
+.difficulty-dot:hover {
+  transform: translateY(-2px);
+}
+
+.difficulty-dot.is-selected {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.28);
+  transform: translateY(-2px);
+}
+
+.difficulty-dot:focus-visible {
+  outline: 3px solid #ffd19a;
+  outline-offset: 3px;
+}
+
+.difficulty-choices.needs-pick .difficulty-dot {
+  animation: difficulty-nudge 0.45s ease;
+}
+
+@keyframes difficulty-nudge {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.howto-status {
+  margin: 0;
+  min-height: 1.4rem;
+  color: #c9daf0;
+  font-size: 0.95rem;
+}
+
+.howto-status.is-warning {
+  color: #ffb4a2;
+  font-weight: 700;
+}
+
+.difficulty-badge {
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  background: #2e9e4f;
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.difficulty-badge[data-difficulty="normal"] { background: #e0b91c; color: #3a2b00; }
+.difficulty-badge[data-difficulty="hard"] { background: #ef8a2b; }
+.difficulty-badge[data-difficulty="expert"] { background: #d8402f; }
+
 .cta-start {
   font: inherit;
   min-width: min(18rem, 80vw);
